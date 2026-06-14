@@ -157,6 +157,7 @@ export function SelectionPopover({ shapeId, onConfirm }: Props) {
     <div
       ref={popoverRef}
       role="toolbar"
+      onClick={(e) => e.stopPropagation()}
       style={{
         position: 'fixed',
         top: coords.top,
