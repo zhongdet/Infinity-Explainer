@@ -209,6 +209,21 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
 
       if (loadingTerm) return
 
+      // ⚠️ Capture click position SYNCHRONOUSLY before any async work.
+      // After `await`, editor.inputs.currentPagePoint is stale (mouse moved).
+      const clickPagePoint = { ...editor.inputs.currentPagePoint }
+      const sourceBounds = editor.getShapePageBounds(shape.id as TLShapeId)
+      if (!sourceBounds) return
+
+      const searchCenterX = sourceBounds.minX + sourceBounds.width / 2
+      const searchCenterY = sourceBounds.minY + sourceBounds.height / 2
+
+      // baseAngle in page space, matching getShapePageBounds & SectorSearch
+      const baseAngle = Math.atan2(
+        clickPagePoint.y - searchCenterY,
+        clickPagePoint.x - searchCenterX,
+      )
+
       abortRef.current?.abort()
       const abort = new AbortController()
       abortRef.current = abort
@@ -218,18 +233,6 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
       try {
         const result = await llmService.explain(term)
         if (abort.signal.aborted) return
-
-        const sourceBounds = editor.getShapePageBounds(shape.id as TLShapeId)
-        if (!sourceBounds) return
-
-        const searchCenterX = sourceBounds.minX + sourceBounds.width / 2
-        const searchCenterY = sourceBounds.minY + sourceBounds.height / 2
-
-        const pagePoint = editor.inputs.currentPagePoint
-        const baseAngle = Math.atan2(
-          pagePoint.y - searchCenterY,
-          pagePoint.x - searchCenterX,
-        )
 
         const W = 360
         const H = 240
@@ -284,10 +287,10 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
 
         if (abort.signal.aborted) return
 
-        // Flow C: 建立連接線
+        // Flow C: 建立連接線 — anchor 基於同步 capture 的 clickPagePoint
         const srcShape = editor.getShape(shape.id as TLShapeId)
         const localPoint = srcShape
-          ? editor.getPointInShapeSpace(srcShape, pagePoint)
+          ? editor.getPointInShapeSpace(srcShape, clickPagePoint)
           : { x: 0, y: 0 }
         const sourceW = shape.props.w
         const sourceH = shape.props.h
@@ -316,8 +319,8 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
         editor.createShape({
           id: errShapeId,
           type: 'explainer' as any,
-          x: editor.inputs.currentPagePoint.x + 20,
-          y: editor.inputs.currentPagePoint.y + 20,
+          x: clickPagePoint.x + 20,
+          y: clickPagePoint.y + 20,
           props: {
             text: `【${term}】\n\n⚠️ 解釋失敗：${err instanceof Error ? err.message : String(err)}`,
             w: 360,
