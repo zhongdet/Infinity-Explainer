@@ -14,7 +14,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tokenizer } from './core/Tokenizer'
 import { getClickableTerms } from './core/types'
 import type { ExplainerShapeProps, TextSegment } from './core/types'
-import { SelectionPopover } from './components/SelectionPopover'
 import { termRegistry, llmService } from './core/services'
 
 /* ============================================================
@@ -334,24 +333,7 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
   )
 
   /* ---- Flow B: 選取文字 → SelectionPopover（由 SelectionPopover 內部監聽 selectionchange） ---- */
-  const handleSelectionConfirm = useCallback(
-    (text: string) => {
-      console.log('[test] selection callback')
-      const shapeData = editor.getShape(shape.id as TLShapeId)
-      if (!shapeData) return
-
-      const currentUserTerms: string[] = (shapeData.props as any).userTerms ?? []
-      const currentTerms: string[] = (shapeData.props as any).terms ?? []
-      if (!currentUserTerms.includes(text) && !currentTerms.includes(text)) {
-        editor.updateShape({
-          id: shape.id as TLShapeId,
-          type: 'explainer' as any,
-          props: { userTerms: [...currentUserTerms, text] },
-        })
-      }
-    },
-    [editor, shape.id],
-  )
+  /* ---- Flow B: 選取文字 → SelectionPopover 移至 App 層級 ---- */
 
   /* ---- Render ---- */
   // Use a wrapper div inside HTMLContainer to get a ref
@@ -378,15 +360,11 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
         position: 'relative',
       }}
     >
-      <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+      <div ref={containerRef} data-shape-root={shape.id} style={{ position: 'relative', width: '100%', height: '100%' }}>
         <RichTextRenderer
           segments={segments}
           clickableTerms={clickableTermSet}
           onTermClick={handleTermClick}
-        />
-        <SelectionPopover
-          shapeId={shape.id}
-          onConfirm={handleSelectionConfirm}
         />
       </div>
     </HTMLContainer>

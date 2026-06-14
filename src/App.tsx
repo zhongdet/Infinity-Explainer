@@ -6,6 +6,7 @@ import { AnimatedLineShapeUtil } from './AnimatedLineShapeUtil'
 import { initialText, demoTerms } from './dictionary'
 import { llmService } from './core/services'
 import { LLMConfigPanel } from './components/LLMConfigPanel'
+import { SelectionPopover } from './components/SelectionPopover'
 import type { LLMConfig } from './core/types'
 
 const customShapeUtils = [ExplainerShapeUtil, AnimatedLineShapeUtil]
@@ -13,6 +14,7 @@ const customShapeUtils = [ExplainerShapeUtil, AnimatedLineShapeUtil]
 function App() {
   const [showConfig, setShowConfig] = useState(false)
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(() => llmService.getConfig())
+  const [editor, setEditor] = useState<Editor | null>(null)
 
   const handleSaveConfig = useCallback((cfg: LLMConfig) => {
     llmService.configure(cfg)
@@ -20,6 +22,8 @@ function App() {
   }, [])
 
   const handleMount = useCallback((editor: Editor) => {
+    setEditor(editor)
+
     editor.setCameraOptions({
       wheelBehavior: 'zoom',
       panSpeed: 1,
@@ -61,6 +65,9 @@ function App() {
         onMount={handleMount}
         hideUi={false}
       />
+
+      {/* 全域 SelectionPopover — 在 App 層級，完全脫離 tldraw 事件/transform 影響 */}
+      <SelectionPopover editor={editor} />
 
       <button
         onClick={() => setShowConfig(!showConfig)}
