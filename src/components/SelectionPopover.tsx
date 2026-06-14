@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 interface Props {
-  /** 容器 element（用於判斷選取是否在容器內） */
-  containerEl: HTMLElement | null
+  /** ExplainerShape 的 id（用於找容器 element） */
+  shapeId: string
   /** 文字選取後要執行的動作 */
   onConfirm: (text: string) => void
 }
@@ -13,7 +13,7 @@ interface Props {
  *
  * 使用方式：
  * ```tsx
- * <SelectionPopover containerEl={containerRef.current} onConfirm={handleConfirm} />
+ * <SelectionPopover shapeId={shape.id} onConfirm={handleConfirm} />
  * ```
  *
  * 靈感來自 radix-ui/selection-popover 的設計模式：
@@ -21,7 +21,7 @@ interface Props {
  * - openDelay / closeDelay 避免閃爍
  * - ESC / scroll / click-outside 關閉
  */
-export function SelectionPopover({ containerEl, onConfirm }: Props) {
+export function SelectionPopover({ shapeId, onConfirm }: Props) {
   const [state, setState] = useState<{
     text: string
     rect: DOMRect
@@ -37,9 +37,11 @@ export function SelectionPopover({ containerEl, onConfirm }: Props) {
 
   // ── 監聽 selectionchange ──
   useEffect(() => {
+    const containerEl = document.getElementById(shapeId)
     if (!containerEl) return
 
     const handleSelectionChange = () => {
+      console.log('[test] selection ')
       const sel = window.getSelection()
       if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
         // 選取消失 → 延遲關閉
@@ -79,7 +81,7 @@ export function SelectionPopover({ containerEl, onConfirm }: Props) {
       clearTimeout(openTimerRef.current)
       clearTimeout(closeTimerRef.current)
     }
-  }, [containerEl])
+  }, [shapeId])
 
   // ── 定位計算（viewport 碰撞處理） ──
   useEffect(() => {

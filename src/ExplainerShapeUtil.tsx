@@ -336,6 +336,7 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
   /* ---- Flow B: 選取文字 → SelectionPopover（由 SelectionPopover 內部監聽 selectionchange） ---- */
   const handleSelectionConfirm = useCallback(
     (text: string) => {
+      console.log('[test] selection callback')
       const shapeData = editor.getShape(shape.id as TLShapeId)
       if (!shapeData) return
 
@@ -384,7 +385,7 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
           onTermClick={handleTermClick}
         />
         <SelectionPopover
-          containerEl={containerRef.current}
+          shapeId={shape.id}
           onConfirm={handleSelectionConfirm}
         />
       </div>
