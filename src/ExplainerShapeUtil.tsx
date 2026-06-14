@@ -146,10 +146,6 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
   const editor = useEditor()
   const tokenizerRef = useRef(new Tokenizer())
   const [loadingTerm, setLoadingTerm] = useState<string | null>(null)
-  const [selectionState, setSelectionState] = useState<{
-    text: string
-    rect: DOMRect
-  } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -337,35 +333,7 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
     [editor, llmService, shape.id, shape.props.w, shape.props.h, loadingTerm],
   )
 
-  /* ---- Flow B: 選取文字 → SelectionPopover ---- */
-  const handlePointerUpCapture = useCallback(
-    (e: React.PointerEvent) => {
-      if (loadingTerm) return
-      if (selectionState) return
-
-      const target = e.target as HTMLElement
-      if (target.dataset?.term) return
-
-      const sel = window.getSelection()
-      if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) return
-
-      const container = containerRef.current
-      if (!container || !container.contains(sel.anchorNode)) return
-
-      const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
-
-      e.preventDefault()
-      e.stopPropagation()
-
-      setSelectionState({
-        text: sel.toString().trim(),
-        rect,
-      })
-    },
-    [loadingTerm, selectionState],
-  )
-
+  /* ---- Flow B: 選取文字 → SelectionPopover（由 SelectionPopover 內部監聽 selectionchange） ---- */
   const handleSelectionConfirm = useCallback(
     (text: string) => {
       const shapeData = editor.getShape(shape.id as TLShapeId)
@@ -380,16 +348,9 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
           props: { userTerms: [...currentUserTerms, text] },
         })
       }
-      setSelectionState(null)
-      window.getSelection()?.removeAllRanges()
     },
     [editor, shape.id],
   )
-
-  const handleSelectionClose = useCallback(() => {
-    setSelectionState(null)
-    window.getSelection()?.removeAllRanges()
-  }, [])
 
   /* ---- Render ---- */
   // Use a wrapper div inside HTMLContainer to get a ref
@@ -415,7 +376,6 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
         boxSizing: 'border-box',
         position: 'relative',
       }}
-      onPointerUpCapture={handlePointerUpCapture}
     >
       <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
         <RichTextRenderer
@@ -423,14 +383,10 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
           clickableTerms={clickableTermSet}
           onTermClick={handleTermClick}
         />
-        {selectionState && (
-          <SelectionPopover
-            selectedText={selectionState.text}
-            selectionRect={selectionState.rect}
-            onConfirm={handleSelectionConfirm}
-            onClose={handleSelectionClose}
-          />
-        )}
+        <SelectionPopover
+          containerEl={containerRef.current}
+          onConfirm={handleSelectionConfirm}
+        />
       </div>
     </HTMLContainer>
   )
