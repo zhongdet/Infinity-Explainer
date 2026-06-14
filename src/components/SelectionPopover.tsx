@@ -49,9 +49,9 @@ export function SelectionPopover({ editor }: Props) {
       const hasSel = sel && !sel.isCollapsed && sel.toString().trim().length > 0
 
       if (visible) {
-        // Popover 已開啟 → 永不自動關閉
-        // 但如果是新的選取（文字不同），更新內容
+        // Popover 已開啟
         if (hasSel) {
+          // 使用者選取了新的文字 → 更新內容
           const t = sel!.toString().trim()
           const rootEl = sel!.anchorNode?.parentElement?.closest('[data-shape-root]') as HTMLElement | null
           if (rootEl && t !== stateRef.current?.text) {
@@ -60,6 +60,12 @@ export function SelectionPopover({ editor }: Props) {
             clearTimeout(closeTimerRef.current)
             setState({ shapeId: sid, text: t, rect: range.getBoundingClientRect() })
           }
+        } else {
+          // 選取消失了 → 關閉 popover
+          setVisible(false)
+          closeTimerRef.current = window.setTimeout(() => {
+            setState(null)
+          }, CLOSE_DELAY)
         }
         return
       }
