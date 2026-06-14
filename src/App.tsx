@@ -6,6 +6,7 @@ import { AnimatedLineShapeUtil } from './AnimatedLineShapeUtil'
 import { initialText, demoTerms } from './dictionary'
 import { llmService } from './core/services'
 import { LLMConfigPanel } from './components/LLMConfigPanel'
+import { LineOverlay } from './components/LineOverlay'
 import type { LLMConfig } from './core/types'
 
 const customShapeUtils = [ExplainerShapeUtil, AnimatedLineShapeUtil]
@@ -13,6 +14,7 @@ const customShapeUtils = [ExplainerShapeUtil, AnimatedLineShapeUtil]
 function App() {
   const [showConfig, setShowConfig] = useState(false)
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(() => llmService.getConfig())
+  const [editor, setEditor] = useState<Editor | null>(null)
 
   const handleSaveConfig = useCallback((cfg: LLMConfig) => {
     llmService.configure(cfg)
@@ -20,6 +22,8 @@ function App() {
   }, [])
 
   const handleMount = useCallback((editor: Editor) => {
+    setEditor(editor)
+
     editor.setCameraOptions({
       wheelBehavior: 'zoom',
       panSpeed: 1,
@@ -61,6 +65,9 @@ function App() {
         onMount={handleMount}
         hideUi={false}
       />
+
+      {/* Line overlay — renders outside tldraw's shape culling */}
+      {editor && <LineOverlay editor={editor} />}
 
       <button
         onClick={() => setShowConfig(!showConfig)}
