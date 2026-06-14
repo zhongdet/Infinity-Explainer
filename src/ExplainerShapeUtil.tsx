@@ -128,34 +128,6 @@ const RichTextRenderer = ({
 }
 
 /* ============================================================
-   LoadingOverlay
-   ============================================================ */
-
-const LoadingOverlay = ({ term }: { term: string }) => (
-  <div
-    style={{
-      position: 'absolute',
-      inset: 0,
-      backgroundColor: 'rgba(255,255,255,0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 12,
-      zIndex: 10,
-      fontSize: 14,
-      color: '#2563eb',
-      fontWeight: 500,
-      pointerEvents: 'all',
-    }}
-  >
-    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span className="loading-spinner" />
-      正在解釋「{term}」…
-    </span>
-  </div>
-)
-
-/* ============================================================
    Shape Component
    ============================================================ */
 
@@ -201,16 +173,14 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
     }
   }, [shape.id, allTerms, termRegistry])
 
-  /* ---- Flow A: 點擊名詞 → LLM 解釋 → 新 Shape + AnimatedLine ---- */
+  /* ---- Flow A: 點擊名詞 → 立即建立 Shape + 串流 LLM 解釋 ---- */
   const handleTermClick = useCallback(
     async (term: string, e: React.PointerEvent) => {
       e.stopPropagation()
       e.preventDefault()
-
       if (loadingTerm) return
 
-      // ⚠️ Capture click position SYNCHRONOUSLY before any async work.
-      // After `await`, editor.inputs.currentPagePoint is stale (mouse moved).
+      // 1. Capture click position SYNCHRONOUSLY (before any async work)
       const clickPagePoint = { ...editor.inputs.currentPagePoint }
       const sourceBounds = editor.getShapePageBounds(shape.id as TLShapeId)
       if (!sourceBounds) return
@@ -218,117 +188,135 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
       const searchCenterX = sourceBounds.minX + sourceBounds.width / 2
       const searchCenterY = sourceBounds.minY + sourceBounds.height / 2
 
-      // baseAngle in page space, matching getShapePageBounds & SectorSearch
       const baseAngle = Math.atan2(
         clickPagePoint.y - searchCenterY,
         clickPagePoint.x - searchCenterX,
       )
 
+      // 2. Calculate position immediately (SectorSearch)
+      const W = 360
+      const H = 240
+
+      const currentShapes = editor.getCurrentPageShapes()
+      const checkCollision = (cx: number, cy: number) => {
+        const testBounds = {
+          minX: cx - W / 2,
+          minY: cy - H / 2,
+          maxX: cx + W / 2,
+          maxY: cy + H / 2,
+        }
+        for (const s of currentShapes) {
+          if ((s.type as string) === 'explainer' && s.id !== shape.id) {
+            const b = editor.getShapePageBounds(s)
+            if (b && boundsCollide(testBounds, b)) return true
+          }
+        }
+        return false
+      }
+
+      const initialRadius =
+        Math.max(sourceBounds.width, sourceBounds.height) / 2 + 50
+      const pos = findPosition(searchCenterX, searchCenterY, baseAngle, checkCollision, initialRadius)
+
+      const newX = pos ? pos.x - W / 2 : searchCenterX + 150
+      const newY = pos ? pos.y - H / 2 : searchCenterY + 100
+
+      // 3. IMMEDIATELY create the shape (placeholder, no LLM yet)
+      const newShapeId = createShapeId()
+      const header = `【${term}】\n\n`
+      editor.createShape({
+        id: newShapeId,
+        type: 'explainer' as any,
+        x: newX,
+        y: newY,
+        props: {
+          text: header + '⋯ 正在生成解釋',
+          w: W,
+          h: H,
+          terms: [] as string[],
+          userTerms: [] as string[],
+        },
+      })
+
+      // 4. IMMEDIATELY create AnimatedLine (Flow C)
+      const srcShape = editor.getShape(shape.id as TLShapeId)
+      const localPoint = srcShape
+        ? editor.getPointInShapeSpace(srcShape, clickPagePoint)
+        : { x: 0, y: 0 }
+      const sourceW = shape.props.w
+      const sourceH = shape.props.h
+      const anchorX = sourceW > 0 ? localPoint.x / sourceW : 0.5
+      const anchorY = sourceH > 0 ? localPoint.y / sourceH : 0.5
+
+      editor.createShape({
+        id: createShapeId(),
+        type: 'animatedLine' as any,
+        x: 0,
+        y: 0,
+        props: {
+          startId: shape.id,
+          endId: newShapeId,
+          startAnchorX: anchorX,
+          startAnchorY: anchorY,
+          endAnchorX: 0.5,
+          endAnchorY: 0.5,
+        },
+      })
+
+      // 5. Stream LLM response into the new shape
       abortRef.current?.abort()
       const abort = new AbortController()
       abortRef.current = abort
-
       setLoadingTerm(term)
 
+      const shapeIdRef = newShapeId // copy for closure
+
       try {
-        const result = await llmService.explain(term)
-        if (abort.signal.aborted) return
-
-        const W = 360
-        const H = 240
-
-        const shapes = editor.getCurrentPageShapes()
-        const checkCollision = (cx: number, cy: number) => {
-          const testBounds = {
-            minX: cx - W / 2,
-            minY: cy - H / 2,
-            maxX: cx + W / 2,
-            maxY: cy + H / 2,
-          }
-          for (const s of shapes) {
-            if ((s.type as string) === 'explainer' && s.id !== shape.id) {
-              const b = editor.getShapePageBounds(s)
-              if (b && boundsCollide(testBounds, b)) return true
+        const result = await llmService.explainStream(
+          term,
+          (fullText) => {
+            // onProgress: update shape text as tokens arrive
+            if (abort.signal.aborted) return
+            const existing = editor.getShape(shapeIdRef as TLShapeId)
+            if (existing) {
+              editor.updateShape({
+                id: shapeIdRef as TLShapeId,
+                type: 'explainer' as any,
+                props: { text: header + fullText },
+              })
             }
-          }
-          return false
-        }
-
-        const initialRadius =
-          Math.max(sourceBounds.width, sourceBounds.height) / 2 + 50
-        const pos = findPosition(
-          searchCenterX,
-          searchCenterY,
-          baseAngle,
-          checkCollision,
-          initialRadius,
+          },
+          abort.signal,
         )
-
-        const newX = pos ? pos.x - W / 2 : searchCenterX + 150
-        const newY = pos ? pos.y - H / 2 : searchCenterY + 100
-
         if (abort.signal.aborted) return
 
-        // 建立新 ExplainerShape
-        const newShapeId = createShapeId()
-        editor.createShape({
-          id: newShapeId,
-          type: 'explainer' as any,
-          x: newX,
-          y: newY,
-          props: {
-            text: `【${term}】\n\n${result.explanation}`,
-            w: W,
-            h: H,
-            terms: result.technical_terms,
-            userTerms: [] as string[],
-          },
-        })
-
-        if (abort.signal.aborted) return
-
-        // Flow C: 建立連接線 — anchor 基於同步 capture 的 clickPagePoint
-        const srcShape = editor.getShape(shape.id as TLShapeId)
-        const localPoint = srcShape
-          ? editor.getPointInShapeSpace(srcShape, clickPagePoint)
-          : { x: 0, y: 0 }
-        const sourceW = shape.props.w
-        const sourceH = shape.props.h
-        const anchorX = sourceW > 0 ? localPoint.x / sourceW : 0.5
-        const anchorY = sourceH > 0 ? localPoint.y / sourceH : 0.5
-
-        editor.createShape({
-          id: createShapeId(),
-          type: 'animatedLine' as any,
-          x: 0,
-          y: 0,
-          props: {
-            startId: shape.id,
-            endId: newShapeId,
-            startAnchorX: anchorX,
-            startAnchorY: anchorY,
-            endAnchorX: 0.5,
-            endAnchorY: 0.5,
-          },
-        })
+        // Stream complete — final text + terms
+        const existing = editor.getShape(shapeIdRef as TLShapeId)
+        if (existing) {
+          editor.updateShape({
+            id: shapeIdRef as TLShapeId,
+            type: 'explainer' as any,
+            props: {
+              text: header + result.explanation,
+              terms: result.technical_terms,
+            },
+          })
+        }
       } catch (err: unknown) {
         if (abort.signal.aborted) return
         console.error('LLM explain error:', err)
-        // 顯示錯誤在一個新 shape 上
-        const errShapeId = createShapeId()
-        editor.createShape({
-          id: errShapeId,
-          type: 'explainer' as any,
-          x: clickPagePoint.x + 20,
-          y: clickPagePoint.y + 20,
-          props: {
-            text: `【${term}】\n\n⚠️ 解釋失敗：${err instanceof Error ? err.message : String(err)}`,
-            w: 360,
-            h: 180,
-            terms: [] as string[],
-            userTerms: [] as string[],
-          },
-        })
+        const existing = editor.getShape(shapeIdRef as TLShapeId)
+        if (existing) {
+          editor.updateShape({
+            id: shapeIdRef as TLShapeId,
+            type: 'explainer' as any,
+            props: {
+              text: header + `⚠️ 解釋失敗：${err instanceof Error ? err.message : String(err)}`,
+              w: W,
+              h: Math.max(H, 180),
+            },
+          })
+        }
       } finally {
         if (!abort.signal.aborted) {
           setLoadingTerm(null)
@@ -419,7 +407,6 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
       onPointerUpCapture={handlePointerUpCapture}
     >
       <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
-        {loadingTerm && <LoadingOverlay term={loadingTerm} />}
         <RichTextRenderer
           segments={segments}
           clickableTerms={clickableTermSet}

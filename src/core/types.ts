@@ -49,8 +49,18 @@ export interface ITokenizer {
 export interface ILLMService {
   configure(cfg: LLMConfig): void
   getConfig(): LLMConfig
-  /** 回傳解釋文字 + 該解釋中的技術名詞列表 */
+  /** 非串流：回傳完整解釋 + 技術名詞列表 */
   explain(term: string, context?: string): Promise<ExplanationResult>
+  /**
+   * 串流：onProgress(fullText) 在每個 token 抵達時回呼，
+   * Promise resolve 時回傳完整 ExplanationResult（含 technical_terms）。
+   */
+  explainStream(
+    term: string,
+    onProgress: (fullText: string) => void,
+    signal?: AbortSignal,
+    context?: string,
+  ): Promise<ExplanationResult>
 }
 
 /* ===== Helper ===== */
