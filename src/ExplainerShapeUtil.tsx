@@ -95,7 +95,7 @@ const RichTextRenderer = ({
   onTermClick,
 }: RichTextRendererProps) => {
   return (
-    <div style={{ whiteSpace: 'pre-wrap', pointerEvents: 'none' }}>
+    <div style={{ whiteSpace: 'pre-wrap' }}>
       {segments.map((seg, i) => {
         const isClickable = seg.isTerm || seg.isUserTerm
         const isMatched = isClickable && clickableTerms.has(seg.text)
@@ -111,17 +111,28 @@ const RichTextRenderer = ({
                 borderRadius: 4,
                 cursor: isMatched ? 'pointer' : 'default',
                 fontWeight: 600,
-                pointerEvents: isMatched ? 'all' : 'none',
+                pointerEvents: 'all',
+                userSelect: 'text',
               }}
               onPointerDown={(e) => {
                 if (isMatched) onTermClick(seg.text, e)
+                // Non-matched terms still need to prevent reaching tldraw
+                e.stopPropagation()
               }}
             >
               {seg.text}
             </span>
           )
         }
-        return <span key={i}>{seg.text}</span>
+        return (
+          <span
+            key={i}
+            style={{ userSelect: 'text', pointerEvents: 'all' }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {seg.text}
+          </span>
+        )
       })}
     </div>
   )
