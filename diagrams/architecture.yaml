@@ -1,0 +1,249 @@
+# ============================================================================
+# Infinity Explainer — Agent/LLM Architecture Specification
+# Target: LLM code generation, auto-dependency resolution, interface enforcement
+# ============================================================================
+
+# ============================================================================
+# 1. MODULE DEFINITIONS
+# ============================================================================
+modules:
+  app_layer:
+    path: src/app/
+    description: "Top-level app bootstrap, config persistence, registry init"
+
+    entities:
+      term_registry:
+        description: "全域名詞索引（僅做存在性查詢，不綁定 scope）"
+        methods:
+          - name: register(term, shapeId)
+            params: [term: string, shapeId: string]
+            returns: void
+            note: "註冊一個名詞屬於哪個 Shape（用於跨 Shape 參考）"
+          - name: getTerms(shapeId?)
+            returns: string[]
+            note: "不傳 shapeId 回傳全部，傳了回傳該 Shape 的 terms"
+          - name: isTerm(text)
+            returns: boolean
+            note: "全域查詢該文本是否已被註冊為詞彙"
+          - name: unregisterShapeTerms(shapeId)
+            returns: void
+            note: "刪除 Shape 時清理，若有計數則減引用"
+
+      llm_config:
+        storage: localStorage
+        key: "infinity-explainer-llm-config"
+        fields:
+          - provider: string  # "llama.cpp" | "openai"
+          - baseUrl: string
+          - model: string
+          - temperature: number
+
+  tldraw_editor:
+    path: src/editor/
+    description: "tldraw integration — custom shapes, util wrappers"
+    apis_used:
+      - editor.createShape(shapeDef)
+      - editor.getShapePageBounds(shapeId)
+      - editor.deleteShapes(shapeIds)
+      - editor.updateShape(shapeId, partial)
+
+  core_modules:
+    path: src/core/
+    description: "純 function / interface，無 UI 依賴，可單元測試"
+
+    interfaces:
+      tokenizer:
+        signature: tokenize(text: string, knownTerms: string[]) -> TextSegment[]
+        algorithm: longest-match-first
+        options:
+          wordBoundary: boolean  # 可選，啟用時只匹配 word boundary
+        types:
+          TextSegment:
+            type: "text" | "term"
+            text: string
+            termId: string?
+
+      llm_service:
+        signature: explain(term: string, context?: string) -> ExplanationResult
+        configurable: true
+        implementors:
+          - llama.cpp (local)
+          - OpenAI API
+          - 可擴充
+        types:
+          ExplanationResult:
+            explanation: string
+            technicalTerms: string[]
+
+  explainer_shape:
+    path: src/shapes/explainer/
+    description: "tldraw custom shape — 可解釋的文字方塊"
+
+    shapeProps:
+      text: string
+      width: number
+      height: number
+      terms: string[]              # 從 LLM 回應來的 technicalTerms，不可編輯
+      userTerms: string[]          # 使用者手動選取標記的詞彙，可累加
+
+    subComponents:
+      rich_text_renderer:
+        input: [text: string, knownTerms: string[]]
+        process: "tokenize(text, knownTerms) → render segments"
+        output: JSX (text spans + clickable term spans)
+        note: "userTerms segment 與 term segment 視覺上區分（如底線顏色不同）"
+
+      event_boundary:
+        events_handled: [pointerDown, pointerMove, pointerUp]
+        dispatch_logic:
+          - condition: "hit target is term segment"
+            action: "Flow A (click term)"
+          - condition: "pointerUp with non-empty selection"
+            action: "Flow B (manual select)"
+          - condition: "else"
+            action: "delegate to tldraw default (drag shape, select text frame)"
+
+      selection_popover:
+        trigger: "pointerUp with non-empty selection"
+        action: "render popover at selection top-right"
+        onConfirm: "push selected text → thisShape.userTerms → re-render"
+
+    lifecycle:
+      onDelete: "Flow D"
+
+# ============================================================================
+# 2. PROCESS FLOWS
+# ============================================================================
+flows:
+  flow_a_click_term:
+    description: "使用者點擊 Shape 內的可點擊名詞 → 建立新的解釋 Shape"
+    trigger: EventBoundary → pointerUp → hit term segment
+    steps:
+      - step: 1
+        action: "read term text from hit segment"
+      - step: 2
+        action: "LLMService.explain(term)"
+        note: "LLM 回傳 explanation + technicalTerms[]"
+      - step: 3
+        action: "建立新 Shape"
+        inputs:
+          text: explanation
+          terms: technicalTerms[]      # ← 新 Shape 自己的詞彙
+          userTerms: []                # 初始無手動標記
+        output: newShapeId
+      - step: 4
+        action: "create animated line: parentShape → newShape"
+        stepRef: flow_c
+    note: "LLM 回傳的 technicalTerms 歸新 Shape 所有，不寫入全域 registry（除非需要跨 Shape 引用查詢）"
+
+  flow_b_manual_select:
+    description: "使用者拖曳選取一段純文字 → 手動標記為可解釋詞彙"
+    trigger: EventBoundary → pointerUp → selection.length > 0
+    steps:
+      - step: 1
+        action: "show SelectionPopover at selection position"
+      - step: 2
+        action: "檢查該詞彙是否已在 userTerms 或 terms 中"
+        note: "若已存在，Popover 顯示「已標記」，不做重複添加"
+      - step: 3
+        action: "onConfirm: push text → thisShape.userTerms"
+      - step: 4
+        action: "re-render thisShape（userTerm 以不同樣式顯示）"
+    note: "只能標記當前 Shape 內未註冊的詞彙，不影響其他 Shape"
+
+  flow_c_animated_line:
+    description: "解釋完成時建立 parent→child 連接線"
+    trigger: Flow A step 4
+    steps:
+      - step: 1
+        action: "獲取 parentShape 與 newShape 的頁面邊界"
+        api: editor.getShapePageBounds
+      - step: 2
+        action: "計算 startAnchor（SectorSearch: 按扇形區域避開已有連線碰撞）"
+      - step: 3
+        action: "create animated line shape"
+        properties:
+          from: parentShapeId
+          to: newShapeId
+          anchorStart: Point
+          anchorEnd: Point
+      - step: 4
+        action: "store connection in registry (for lifecycle cleanup)"
+    note: "animated line 隨 parent 或 child 被刪除而自動移除（見 Flow D）"
+
+  flow_d_delete_shape:
+    description: "刪除 ExplainerShape 時的 cleanup"
+    trigger: "editor store 'change' event → shape removed"
+    steps:
+      - step: 1
+        action: "detect shape deletion via store listener"
+      - step: 2
+        action: "remove associated animated lines (parent or child link)"
+      - step: 3
+        action: "term_registry.unregisterShapeTerms(shapeId)"
+        note: "若系統使用全域 registry，移除該 Shape 的索引項"
+      - step: 4
+        action: "end — terms 隨 Shape 消失，其他 Shape 不受影響"
+    note: "由於每個 Shape 持有自己的 terms[]，無需全域 cleanup；若需跨 Shape 參考索引才需要 step 3"
+
+# ============================================================================
+# 3. DATA FLOW & DEPENDENCIES
+# ============================================================================
+dependencies:
+  app_layer:
+    depends_on: [tldraw_editor, explainer_shape]
+  explainer_shape:
+    depends_on: [core_modules]
+    rich_text_renderer:
+      consumes:
+        - tokenizer.tokenize(text, terms)
+        - term_registry.getTerms(shapeId)  # 用於跨 Shape 詞彙提示（可選）
+    event_boundary:
+      triggers: [flow_a_click_term, flow_b_manual_select]
+      fallback: tldraw_editor (default behavior)
+  core_modules:
+    llm_service:
+      reads: [llm_config (from localStorage)]
+      writes: [explanation + technicalTerms → new shape]
+    tokenizer:
+      stateless: true
+      input: [text, knownTerms[]]
+      output: TextSegment[]
+
+# ============================================================================
+# 4. COMPONENT TREE (React rendering hierarchy)
+# ============================================================================
+component_tree:
+  App:
+    children: [TldrawEditor]
+  TldrawEditor:
+    shapes: [ExplainerShape]
+  ExplainerShape:
+    children: [EventBoundary]
+  EventBoundary:
+    children: [RichTextRenderer, SelectionPopover]
+  RichTextRenderer:
+    children: [TextSegment, ClickableTermSegment]
+
+# ============================================================================
+# 5. CONTRACTS & EDGE CASES
+# ============================================================================
+contracts:
+  - id: C001
+    description: "term 重複點擊不產生重複 Shape"
+    rule: "如果 term text 已在目標 Shape 的 terms[] 或 userTerms[] 中，再次點擊不觸發 Flow A"
+  - id: C002
+    description: "手動標記不會跨 Shape"
+    rule: "SelectionPopover 只修改 thisShape.userTerms，無法修改其他 Shape"
+  - id: C003
+    description: "animated line 不遺漏 cleanup"
+    rule: "當 parent 或 child shape 任一方被刪除，相關 animated lines 必須被移除"
+  - id: C004
+    description: "LLM technicalTerms 去重"
+    rule: "LLM 回传的 technicalTerms 需過濾掉已在 parent shape 中註冊的詞彙，避免無意義遞迴"
+  - id: C005
+    description: "concurrent click 安全性"
+    rule: "如果使用者快速點擊多個 term，每個 Flow A 獨立的 debounce 確保不重複建立相同 term 的 Shape"
+  - id: C006
+    description: "TermRegistry scope 决定"
+    rule: "terms 默認綁定在 Shape scope，TermRegistry 只做可選的全域索引。實作時應先完成 Shape-scoped 模式，需要跨 Shape 查詢再補全域索引"

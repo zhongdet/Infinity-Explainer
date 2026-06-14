@@ -1,222 +1,443 @@
-import { BaseBoxShapeUtil, HTMLContainer, createShapeId, useEditor } from 'tldraw'
-import type { RecordProps, TLBaseShape, TLShapeId } from 'tldraw'
+import {
+  BaseBoxShapeUtil,
+  HTMLContainer,
+  createShapeId,
+  useEditor,
+} from 'tldraw'
 import { T } from 'tldraw'
-import { dictionary } from './dictionary'
+import type {
+  RecordProps,
+  TLBaseShape,
+  TLShapeId,
+} from 'tldraw'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Tokenizer } from './core/Tokenizer'
+import { getClickableTerms } from './core/types'
+import type { ExplainerShapeProps, TextSegment } from './core/types'
+import { SelectionPopover } from './components/SelectionPopover'
+import { termRegistry, llmService } from './core/services'
 
-export type ExplainerShape = TLBaseShape<'explainer', {
-  text: string
-  w: number
-  h: number
-}>
+/* ============================================================
+   Shape Type Definition
+   ============================================================ */
+
+export type ExplainerShape = TLBaseShape<'explainer', ExplainerShapeProps>
 
 export const explainerShapeProps: RecordProps<ExplainerShape> = {
   text: T.string,
   w: T.number,
   h: T.number,
+  terms: T.arrayOf(T.string),
+  userTerms: T.arrayOf(T.string),
 }
 
-function boundsCollide(a: any, b: any, extraPadding: number = 0) {
+/* ============================================================
+   SectorSearch — 碰撞避讓演算法
+   ============================================================ */
+
+function boundsCollide(
+  a: { minX: number; minY: number; maxX: number; maxY: number },
+  b: { minX: number; minY: number; maxX: number; maxY: number },
+  extraPadding = 0,
+) {
   const PADDING = 40 + extraPadding
-  const aminX = a.minX - PADDING
-  const amaxX = a.maxX + PADDING
-  const aminY = a.minY - PADDING
-  const amaxY = a.maxY + PADDING
-
-  return !(amaxX < b.minX || aminX > b.maxX || amaxY < b.minY || aminY > b.maxY)
+  return !(
+    a.maxX + PADDING < b.minX ||
+    a.minX - PADDING > b.maxX ||
+    a.maxY + PADDING < b.minY ||
+    a.minY - PADDING > b.maxY
+  )
 }
 
-class SectorSearch {
-  blockSize: number
-  sweepRange: number
-  radiusStep: number
-  angleSpeed: number
-  padding: number
+function findPosition(
+  centerX: number,
+  centerY: number,
+  baseAngle: number,
+  checkCollision: (cx: number, cy: number) => boolean,
+  initialRadius = 0,
+): { x: number; y: number } | null {
+  let radius = initialRadius || 140
+  let searchStep = 0
+  const maxAttempts = 1000
+  const sweepRange = Math.PI * 0.8
+  const radiusStep = 4
+  const angleSpeed = 0.15
 
-  constructor(config: any = {}) {
-      this.blockSize = config.blockSize || 40;
-      this.sweepRange = config.sweepRange || Math.PI * 0.8;
-      this.radiusStep = config.radiusStep || 1.2;
-      this.angleSpeed = config.angleSpeed || 0.2;
-      this.padding = config.padding || 1.1;
+  for (let attempts = 0; attempts < maxAttempts; attempts++) {
+    const angleOffset = Math.sin(searchStep * 2) * (sweepRange / 2)
+    const currentAngle = baseAngle + angleOffset
+    const cx = centerX + Math.cos(currentAngle) * radius
+    const cy = centerY + Math.sin(currentAngle) * radius
+
+    if (!checkCollision(cx, cy)) {
+      return { x: cx, y: cy }
+    }
+
+    radius += radiusStep
+    searchStep += angleSpeed
   }
-
-  findPosition(centerX: number, centerY: number, baseAngle: number, checkCollision: (x: number, y: number, r: number) => boolean, initialRadius: number = 0) {
-      let radius = initialRadius || (this.blockSize * 3.5); 
-      let searchStep = 0;
-      let maxAttempts = 1000;
-      let attempts = 0;
-
-      while (attempts < maxAttempts) {
-          const angleOffset = Math.sin(searchStep * 2) * (this.sweepRange / 2);
-          const currentAngle = baseAngle + angleOffset;
-          
-          const x = centerX + Math.cos(currentAngle) * radius;
-          const y = centerY + Math.sin(currentAngle) * radius;
-
-          if (!checkCollision(x, y, this.blockSize * this.padding)) {
-              return { x, y, radius, angle: currentAngle };
-          }
-
-          radius += this.radiusStep;
-          searchStep += this.angleSpeed;
-          attempts++;
-      }
-
-      return null;
-  }
+  return null
 }
 
-const RichTextRenderer = ({ text, shapeId }: { text: string, shapeId: string }) => {
-  const editor = useEditor()
-  
-  const handleNounClick = (e: React.MouseEvent, noun: string) => {
-    e.stopPropagation()
-    const desc = dictionary[noun]
-    if (!desc) return
+/* ============================================================
+   RichTextRenderer
+   ============================================================ */
 
-    const container = document.getElementById(shapeId)
-    
-    let anchorX = 0.5
-    let anchorY = 0.5
-    let baseAngle = 0
+interface RichTextRendererProps {
+  segments: TextSegment[]
+  clickableTerms: Set<string>
+  onTermClick: (term: string, e: React.PointerEvent) => void
+}
 
-
-    if (container) {
-      const sourceShape = editor.getShape(shapeId as TLShapeId)
-      
-      // Instead of reading the DOM bounding box which corrupts heavily on multi-line word wraps,
-      // we extract the exact exact geometric pointer coordinate mapped flawlessly from tldraw's engine!
-      const pagePoint = editor.inputs.currentPagePoint;
-      const localPoint = editor.getPointInShapeSpace(sourceShape as any, pagePoint)
-      
-      const shapeW = (sourceShape?.props as any)?.w || 350
-      const shapeH = (sourceShape?.props as any)?.h || 220
-      
-      anchorX = localPoint.x / shapeW
-      anchorY = localPoint.y / shapeH
-
-      const containerRect = container.getBoundingClientRect()
-      const motherCx = containerRect.left + containerRect.width / 2
-      const motherCy = containerRect.top + containerRect.height / 2
-      
-      // Calculate mother to click vector dynamically using client coords 
-      // (Since baseAngle is just a search array direction, viewport space is fine for atan2)
-      baseAngle = Math.atan2(e.clientY - motherCy, e.clientX - motherCx)
-    }
-    
-    const newShapeId = createShapeId()
-    const W = 350
-    const H = 220
-    
-    const sourceShape = editor.getShape(shapeId as TLShapeId)
-    const sourceBounds = editor.getShapePageBounds(sourceShape as any)
-    
-    let endAnchorX = 0.5;
-    let endAnchorY = 0.5;
-
-    let finalX = 100;
-    let finalY = 100;
-
-    if (sourceBounds) {
-      const searchCenterX = sourceBounds.minX + sourceBounds.width / 2;
-      const searchCenterY = sourceBounds.minY + sourceBounds.height / 2;
-
-      const shapes = editor.getCurrentPageShapes();
-      const checkCollision = (cx: number, cy: number) => {
-          const testBounds = { minX: cx - W/2, minY: cy - H/2, maxX: cx + W/2, maxY: cy + H/2 };
-          for (const s of shapes) {
-              if ((s.type as string) === 'explainer' && s.id !== (shapeId as any)) {
-                  const b = editor.getShapePageBounds(s);
-                  if (b && boundsCollide(testBounds, b)) {
-                      return true;
-                  }
-              }
-          }
-          return false;
-      };
-
-      const agentSearch = new SectorSearch({
-          blockSize: 50,
-          sweepRange: Math.PI * 0.8,
-          radiusStep: 4,     // larger steps for performance
-          angleSpeed: 0.15
-      });
-
-      // Calculate safe dynamic radius so it visually completely clears scaling host cards.
-      // E.g., if the host is 1000px wide, we start outside it immediately!
-      const initialRadius = Math.max(sourceBounds.width, sourceBounds.height) / 2 + 50;
-
-      const pos = agentSearch.findPosition(searchCenterX, searchCenterY, baseAngle, checkCollision, initialRadius);
-
-      if (pos) {
-          finalX = pos.x - W/2;
-          finalY = pos.y - H/2;
-      } else {
-          finalX = searchCenterX + 100;
-          finalY = searchCenterY + 100;
-      }
-    }
-
-    editor.createShape({
-      id: newShapeId,
-      type: 'explainer' as any,
-      x: finalX,
-      y: finalY,
-      props: {
-        text: `【${noun}】\n\n${desc}`,
-        w: W,
-        h: H
-      }
-    })
-
-    const lineId = createShapeId()
-    editor.createShape({
-      id: lineId,
-      type: 'animatedLine' as any,
-      x: 0,
-      y: 0,
-      props: {
-        startId: shapeId,
-        endId: newShapeId,
-        startAnchorX: anchorX,
-        startAnchorY: anchorY,
-        endAnchorX: endAnchorX,
-        endAnchorY: endAnchorY,
-      }
-    })
-  }
-
-  const keys = Object.keys(dictionary).sort((a,b) => b.length - a.length);
-  const regex = new RegExp(`(${keys.join('|')})`, 'g');
-  const parts = text.split(regex);
-
+const RichTextRenderer = ({
+  segments,
+  clickableTerms,
+  onTermClick,
+}: RichTextRendererProps) => {
   return (
     <div style={{ whiteSpace: 'pre-wrap', pointerEvents: 'none' }}>
-      {parts.map((part, i) => {
-        if (dictionary[part]) {
+      {segments.map((seg, i) => {
+        const isClickable = seg.isTerm || seg.isUserTerm
+        const isMatched = isClickable && clickableTerms.has(seg.text)
+        if (isClickable) {
           return (
             <span
               key={i}
+              data-term={seg.text}
               style={{
-                color: '#2563eb',
-                backgroundColor: '#eff6ff',
+                color: isMatched ? '#2563eb' : '#6b7280',
+                backgroundColor: isMatched ? '#eff6ff' : '#f3f4f6',
                 padding: '2px 4px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                pointerEvents: 'all'
+                borderRadius: 4,
+                cursor: isMatched ? 'pointer' : 'default',
+                fontWeight: 600,
+                pointerEvents: isMatched ? 'all' : 'none',
               }}
-              onPointerDown={(e) => handleNounClick(e, part)}
+              onPointerDown={(e) => {
+                if (isMatched) onTermClick(seg.text, e)
+              }}
             >
-              {part}
+              {seg.text}
             </span>
           )
         }
-        return <span key={i}>{part}</span>
+        return <span key={i}>{seg.text}</span>
       })}
     </div>
   )
 }
+
+/* ============================================================
+   LoadingOverlay
+   ============================================================ */
+
+const LoadingOverlay = ({ term }: { term: string }) => (
+  <div
+    style={{
+      position: 'absolute',
+      inset: 0,
+      backgroundColor: 'rgba(255,255,255,0.7)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 12,
+      zIndex: 10,
+      fontSize: 14,
+      color: '#2563eb',
+      fontWeight: 500,
+      pointerEvents: 'all',
+    }}
+  >
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span className="loading-spinner" />
+      正在解釋「{term}」…
+    </span>
+  </div>
+)
+
+/* ============================================================
+   Shape Component
+   ============================================================ */
+
+function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
+  const editor = useEditor()
+  const tokenizerRef = useRef(new Tokenizer())
+  const [loadingTerm, setLoadingTerm] = useState<string | null>(null)
+  const [selectionState, setSelectionState] = useState<{
+    text: string
+    rect: DOMRect
+  } | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [])
+
+  // 目前 shape 的所有可點擊詞彙
+  const allTerms = useMemo(
+    () => getClickableTerms(shape.props),
+    [shape.props.terms, shape.props.userTerms],
+  )
+  const clickableTermSet = useMemo<Set<string>>(
+    () => new Set(allTerms),
+    [allTerms],
+  )
+
+  // Tokenize 文字
+  const segments = useMemo<TextSegment[]>(
+    () => tokenizerRef.current.tokenize(shape.props.text, allTerms),
+    [shape.props.text, allTerms],
+  )
+
+  // 向 TermRegistry 註冊/清除此 shape 的詞彙
+  useEffect(() => {
+    termRegistry.registerAll(allTerms, shape.id)
+    return () => {
+      termRegistry.deregisterShape(shape.id)
+    }
+  }, [shape.id, allTerms, termRegistry])
+
+  /* ---- Flow A: 點擊名詞 → LLM 解釋 → 新 Shape + AnimatedLine ---- */
+  const handleTermClick = useCallback(
+    async (term: string, e: React.PointerEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+
+      if (loadingTerm) return
+
+      abortRef.current?.abort()
+      const abort = new AbortController()
+      abortRef.current = abort
+
+      setLoadingTerm(term)
+
+      try {
+        const result = await llmService.explain(term)
+        if (abort.signal.aborted) return
+
+        const sourceBounds = editor.getShapePageBounds(shape.id as TLShapeId)
+        if (!sourceBounds) return
+
+        const searchCenterX = sourceBounds.minX + sourceBounds.width / 2
+        const searchCenterY = sourceBounds.minY + sourceBounds.height / 2
+
+        const pagePoint = editor.inputs.currentPagePoint
+        const baseAngle = Math.atan2(
+          pagePoint.y - searchCenterY,
+          pagePoint.x - searchCenterX,
+        )
+
+        const W = 360
+        const H = 240
+
+        const shapes = editor.getCurrentPageShapes()
+        const checkCollision = (cx: number, cy: number) => {
+          const testBounds = {
+            minX: cx - W / 2,
+            minY: cy - H / 2,
+            maxX: cx + W / 2,
+            maxY: cy + H / 2,
+          }
+          for (const s of shapes) {
+            if ((s.type as string) === 'explainer' && s.id !== shape.id) {
+              const b = editor.getShapePageBounds(s)
+              if (b && boundsCollide(testBounds, b)) return true
+            }
+          }
+          return false
+        }
+
+        const initialRadius =
+          Math.max(sourceBounds.width, sourceBounds.height) / 2 + 50
+        const pos = findPosition(
+          searchCenterX,
+          searchCenterY,
+          baseAngle,
+          checkCollision,
+          initialRadius,
+        )
+
+        const newX = pos ? pos.x - W / 2 : searchCenterX + 150
+        const newY = pos ? pos.y - H / 2 : searchCenterY + 100
+
+        if (abort.signal.aborted) return
+
+        // 建立新 ExplainerShape
+        const newShapeId = createShapeId()
+        editor.createShape({
+          id: newShapeId,
+          type: 'explainer' as any,
+          x: newX,
+          y: newY,
+          props: {
+            text: `【${term}】\n\n${result.explanation}`,
+            w: W,
+            h: H,
+            terms: result.technical_terms,
+            userTerms: [] as string[],
+          },
+        })
+
+        if (abort.signal.aborted) return
+
+        // Flow C: 建立連接線
+        const srcShape = editor.getShape(shape.id as TLShapeId)
+        const localPoint = srcShape
+          ? editor.getPointInShapeSpace(srcShape, pagePoint)
+          : { x: 0, y: 0 }
+        const sourceW = shape.props.w
+        const sourceH = shape.props.h
+        const anchorX = sourceW > 0 ? localPoint.x / sourceW : 0.5
+        const anchorY = sourceH > 0 ? localPoint.y / sourceH : 0.5
+
+        editor.createShape({
+          id: createShapeId(),
+          type: 'animatedLine' as any,
+          x: 0,
+          y: 0,
+          props: {
+            startId: shape.id,
+            endId: newShapeId,
+            startAnchorX: anchorX,
+            startAnchorY: anchorY,
+            endAnchorX: 0.5,
+            endAnchorY: 0.5,
+          },
+        })
+      } catch (err: unknown) {
+        if (abort.signal.aborted) return
+        console.error('LLM explain error:', err)
+        // 顯示錯誤在一個新 shape 上
+        const errShapeId = createShapeId()
+        editor.createShape({
+          id: errShapeId,
+          type: 'explainer' as any,
+          x: editor.inputs.currentPagePoint.x + 20,
+          y: editor.inputs.currentPagePoint.y + 20,
+          props: {
+            text: `【${term}】\n\n⚠️ 解釋失敗：${err instanceof Error ? err.message : String(err)}`,
+            w: 360,
+            h: 180,
+            terms: [] as string[],
+            userTerms: [] as string[],
+          },
+        })
+      } finally {
+        if (!abort.signal.aborted) {
+          setLoadingTerm(null)
+        }
+      }
+    },
+    [editor, llmService, shape.id, shape.props.w, shape.props.h, loadingTerm],
+  )
+
+  /* ---- Flow B: 選取文字 → SelectionPopover ---- */
+  const handlePointerUpCapture = useCallback(
+    (e: React.PointerEvent) => {
+      if (loadingTerm) return
+      if (selectionState) return
+
+      const target = e.target as HTMLElement
+      if (target.dataset?.term) return
+
+      const sel = window.getSelection()
+      if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) return
+
+      const container = containerRef.current
+      if (!container || !container.contains(sel.anchorNode)) return
+
+      const range = sel.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
+
+      e.preventDefault()
+      e.stopPropagation()
+
+      setSelectionState({
+        text: sel.toString().trim(),
+        rect,
+      })
+    },
+    [loadingTerm, selectionState],
+  )
+
+  const handleSelectionConfirm = useCallback(
+    (text: string) => {
+      const shapeData = editor.getShape(shape.id as TLShapeId)
+      if (!shapeData) return
+
+      const currentUserTerms: string[] = (shapeData.props as any).userTerms ?? []
+      const currentTerms: string[] = (shapeData.props as any).terms ?? []
+      if (!currentUserTerms.includes(text) && !currentTerms.includes(text)) {
+        editor.updateShape({
+          id: shape.id as TLShapeId,
+          type: 'explainer' as any,
+          props: { userTerms: [...currentUserTerms, text] },
+        })
+      }
+      setSelectionState(null)
+      window.getSelection()?.removeAllRanges()
+    },
+    [editor, shape.id],
+  )
+
+  const handleSelectionClose = useCallback(() => {
+    setSelectionState(null)
+    window.getSelection()?.removeAllRanges()
+  }, [])
+
+  /* ---- Render ---- */
+  // Use a wrapper div inside HTMLContainer to get a ref
+  return (
+    <HTMLContainer
+      id={shape.id}
+      className="animate-pop"
+      style={{
+        border: '1px solid #e5e7eb',
+        backgroundColor: '#ffffff',
+        padding: 24,
+        boxShadow:
+          '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
+        borderRadius: 12,
+        overflow: 'auto',
+        fontSize: 16,
+        lineHeight: 1.6,
+        fontFamily: 'system-ui, sans-serif',
+        color: '#1f2937',
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'all',
+        boxSizing: 'border-box',
+        position: 'relative',
+      }}
+      onPointerUpCapture={handlePointerUpCapture}
+    >
+      <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+        {loadingTerm && <LoadingOverlay term={loadingTerm} />}
+        <RichTextRenderer
+          segments={segments}
+          clickableTerms={clickableTermSet}
+          onTermClick={handleTermClick}
+        />
+        {selectionState && (
+          <SelectionPopover
+            selectedText={selectionState.text}
+            selectionRect={selectionState.rect}
+            onConfirm={handleSelectionConfirm}
+            onClose={handleSelectionClose}
+          />
+        )}
+      </div>
+    </HTMLContainer>
+  )
+}
+
+/* ============================================================
+   Shape Util Class
+   ============================================================ */
 
 export class ExplainerShapeUtil extends BaseBoxShapeUtil<any> {
   static type = 'explainer' as const
@@ -225,43 +446,25 @@ export class ExplainerShapeUtil extends BaseBoxShapeUtil<any> {
   getDefaultProps(): ExplainerShape['props'] {
     return {
       text: '',
-      w: 300,
-      h: 200,
+      w: 340,
+      h: 220,
+      terms: [],
+      userTerms: [],
     }
   }
 
   component(shape: ExplainerShape) {
-    const { text } = shape.props
-
-    return (
-      <HTMLContainer
-        id={shape.id}
-        className="animate-pop"
-        style={{
-          border: '1px solid #e5e7eb',
-          backgroundColor: '#ffffff',
-          padding: 24,
-          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-          borderRadius: 12,
-          overflow: 'auto',
-          fontSize: 16,
-          lineHeight: 1.6,
-          fontFamily: 'system-ui, sans-serif',
-          color: '#1f2937',
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'all',
-          boxSizing: 'border-box',
-          transformOrigin: 'top left'
-        }}
-        onPointerDown={(_e) => {}}
-      >
-        <RichTextRenderer text={text} shapeId={shape.id} />
-      </HTMLContainer>
-    )
+    return <ExplainerShapeComponent shape={shape} />
   }
 
   indicator(shape: ExplainerShape) {
-    return <rect width={shape.props.w} height={shape.props.h} />
+    return (
+      <rect
+        width={shape.props.w}
+        height={shape.props.h}
+        rx={12}
+        ry={12}
+      />
+    )
   }
 }

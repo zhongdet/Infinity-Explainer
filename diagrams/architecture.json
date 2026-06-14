@@ -1,0 +1,219 @@
+{
+  "schema": "infinity-explainer-architecture-v1",
+  "description": "Infinity Explainer 架構：基於 tldraw 的互動式文本解釋工具。使用者點擊字卡上的名詞 → LLM 解釋 → 生成新字卡，可手動逐步遞迴。每個 Shape 擁有自己獨立的詞彙作用域。",
+
+  "layers": [
+    {
+      "id": "app-layer",
+      "name": "App Layer",
+      "description": "最上層應用邏輯，管理全域狀態與設定",
+      "entities": [
+        { "id": "term-registry", "name": "TermRegistry", "type": "singleton", "description": "全域詞彙索引（僅供參考，每個 Shape 有自己的作用域）" },
+        { "id": "llm-config", "name": "LLM Config", "type": "persistence", "description": "localStorage 持久化 LLM 設定（provider、model、endpoint）" }
+      ]
+    },
+    {
+      "id": "tldraw-editor",
+      "name": "tldraw Editor",
+      "description": "底層編輯器能力",
+      "entities": [
+        { "id": "shape-utils", "name": "shapeUtils", "type": "tldraw-api", "description": "註冊自訂 Shape（ExplainerShape、AnimatedLineShape）" },
+        { "id": "create-shape", "name": "editor.createShape()", "type": "tldraw-api", "description": "在畫布上建立新 Shape" },
+        { "id": "get-bounds", "name": "editor.getShapePageBounds()", "type": "tldraw-api", "description": "取得 Shape 的位置和尺寸，用於連接線計算" }
+      ]
+    },
+    {
+      "id": "core-modules",
+      "name": "Core Modules",
+      "description": "三項核心介面，可抽換實作",
+      "entities": [
+        { "id": "i-term-registry", "name": "ITermRegistry", "type": "interface",
+          "description": "詞彙索引介面",
+          "methods": [
+            { "name": "register", "params": ["term: string", "shapeId?: string"], "returns": "void", "description": "註冊詞彙，可選作用域" },
+            { "name": "getTerms", "params": ["shapeId?: string"], "returns": "string[]", "description": "取得詞彙，依作用域過濾" },
+            { "name": "isTerm", "params": ["text: string", "shapeId?: string"], "returns": "boolean", "description": "判斷文字是否為已註冊詞彙" }
+          ]
+        },
+        { "id": "i-tokenizer", "name": "ITokenizer", "type": "interface",
+          "description": "文字分詞介面，longest-match-first 策略",
+          "methods": [
+            { "name": "tokenize", "params": ["text: string", "terms: string[]"], "returns": "TextSegment[]",
+              "description": "將文字切成 segment 陣列，每個 segment 標記是否為可點擊的 term" }
+          ]
+        },
+        { "id": "i-llm-service", "name": "ILLMService", "type": "interface",
+          "description": "LLM 解釋介面，可切換 llama.cpp / OpenAI",
+          "methods": [
+            { "name": "configure", "params": ["cfg: LLMConfig"], "returns": "void" },
+            { "name": "explain", "params": ["term: string", "context?: string"], "returns": "ExplanationResult",
+              "description": "回傳解釋文字 + 該解釋中的技術名詞列表" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shape-layer",
+      "name": "TextWindow / ExplainerShape",
+      "description": "自訂 tldraw Shape，是解釋的載體。每個 ExplainerShape 擁有自己獨立的詞彙作用域",
+      "entities": [
+        { "id": "shape-props", "name": "Shape Props", "type": "data",
+          "description": "此 Shape 的屬性",
+          "fields": [
+            { "name": "text", "type": "string", "description": "顯示的文字內容" },
+            { "name": "w", "type": "number", "description": "寬度" },
+            { "name": "h", "type": "number", "description": "高度" },
+            { "name": "terms", "type": "string[]", "description": "此 Shape 內的可點擊詞彙（來自 LLM 回傳的 technical_terms）" },
+            { "name": "userTerms", "type": "string[]", "description": "使用者手動選取標記的詞彙" }
+          ]
+        },
+        { "id": "event-boundary", "name": "EventBoundary", "type": "event-handler",
+          "description": "滑鼠/觸控事件攔截器，三路分支",
+          "events": [
+            { "event": "pointerDown", "action": "記錄起始位置" },
+            { "event": "pointerMove", "action": "如果有 selection，更新選取範圍" },
+            { "event": "pointerUp", "action": "條件判斷三路分支" }
+          ],
+          "conditional_logic": {
+            "input": "pointerUp 時的狀態",
+            "branches": [
+              { "condition": "點到的文字 match this.terms 或 this.userTerms", "target_flow": "flow-a", "description": "觸發 LLM 解釋" },
+              { "condition": "有 selection（使用者選取了文字）", "target_flow": "flow-b", "description": "顯示 Popover 讓使用者標記" },
+              { "condition": "以上皆非", "target": "tldraw-default", "description": "交給 tldraw 原生行為（拖曳、縮放等）" }
+            ]
+          }
+        },
+        { "id": "rich-text-renderer", "name": "RichTextRenderer", "type": "renderer",
+          "description": "將文字依照 tokenize 結果渲染為 rich text",
+          "behavior": "呼叫 ITokenizer.tokenize(text, this.terms + this.userTerms) 後渲染為 inline 元素。term segment 可點擊，普通 segment 不可點擊"
+        },
+        { "id": "selection-popover", "name": "SelectionPopover", "type": "ui",
+          "description": "選取文字後彈出的浮動視窗",
+          "behavior": "選取文字後出現於選取區上方，點擊確認後將該文字加入 thisShape.userTerms 並 re-render"
+        }
+      ]
+    }
+  ],
+
+  "explanation_flows": [
+    {
+      "id": "flow-a",
+      "name": "點擊名詞 → 建立解釋 Shape",
+      "trigger": "EventBoundary 判斷點擊位置為已註冊 term",
+      "is_recursive": true,
+      "recursion_type": "manual",
+      "recursion_note": "使用者逐一手動點擊新 Shape 上的名詞來觸發下一輪，非系統自動遞迴",
+      "steps": [
+        { "order": 1, "actor": "user", "action": "點擊 Shape 上的 term segment" },
+        { "order": 2, "actor": "ILLMService", "action": "LLMService.explain(term)" },
+        { "order": 3, "actor": "system", "action": "將 LLM 回傳的 technical_terms 設定為新 Shape 的 terms",
+          "note": "新 Shape 的 terms 來自 LLM 輸出，與母 Shape 的 terms 隔離" },
+        { "order": 4, "actor": "system", "action": "editor.createShape() + 觸發 Flow C（連接線）" }
+      ]
+    },
+    {
+      "id": "flow-b",
+      "name": "手動選取文字 → 標記",
+      "trigger": "EventBoundary 判斷有 selection",
+      "scope": "僅影響當前 Shape（加入 thisShape.userTerms）",
+      "steps": [
+        { "order": 1, "actor": "user", "action": "在 Shape 上選取一段文字" },
+        { "order": 2, "actor": "SelectionPopover", "action": "顯示 Popover" },
+        { "order": 3, "actor": "user", "action": "確認標記" },
+        { "order": 4, "actor": "system", "action": "push 到 thisShape.userTerms, re-render" }
+      ]
+    },
+    {
+      "id": "flow-c",
+      "name": "建立 AnimatedLine 連接線",
+      "trigger": "Flow A 步驟 4 完成後",
+      "precondition": "新 Shape 的 parent 為點擊來源 Shape",
+      "steps": [
+        { "order": 1, "actor": "system", "action": "計算 startAnchor 位置" },
+        { "order": 2, "actor": "system", "action": "SectorSearch 演算法避免連接線碰撞重疊" },
+        { "order": 3, "actor": "system", "action": "建立 animatedLine Shape，綁定 parent → child 生命週期" }
+      ]
+    },
+    {
+      "id": "flow-d",
+      "name": "刪除 Shape → Cleanup",
+      "trigger": "使用者刪除 ExplainerShape",
+      "steps": [
+        { "order": 1, "actor": "user", "action": "刪除一個 ExplainerShape" },
+        { "order": 2, "actor": "store-listener", "action": "監聽到 shape 被刪除" },
+        { "order": 3, "actor": "system", "action": "移除該 Shape 相關的 animatedLines" },
+        { "order": 4, "actor": "system", "action": "Shape 的 terms / userTerms 隨之銷毀，不影響其他 Shape" }
+      ]
+    }
+  ],
+
+  "data_contracts": [
+    {
+      "id": "explanation-result",
+      "name": "ExplanationResult",
+      "description": "LLM 回傳格式",
+      "format": "JSON",
+      "fields": [
+        { "name": "explanation", "type": "string", "description": "繁體中文的淺顯解釋" },
+        { "name": "technical_terms", "type": "string[]", "description": "解釋中出現的關鍵技術名詞，將成為新 Shape 的可點擊 terms" }
+      ]
+    },
+    {
+      "id": "text-segment",
+      "name": "TextSegment",
+      "type": "interface",
+      "description": "Tokenizer 回傳的單元",
+      "fields": [
+        { "name": "text", "type": "string", "description": "此 segment 的文字" },
+        { "name": "isTerm", "type": "boolean", "description": "是否為已註冊的 term（可點擊）" },
+        { "name": "isUserTerm", "type": "boolean", "description": "是否為使用者手動標記" }
+      ]
+    }
+  ],
+
+  "relationships": [
+    { "from": "app-layer", "to": "tldraw-editor", "type": "depends-on", "description": "App Layer 建立在 tldraw Editor 之上" },
+    { "from": "app-layer", "to": "shape-layer", "type": "depends-on", "description": "App Layer 管理 Shape 的生命週期" },
+    { "from": "core-modules", "to": "shape-layer", "type": "provides-interface", "description": "Core Modules 提供 ITermRegistry / ITokenizer / ILLMService 供 Shape 使用" },
+
+    { "from": "term-registry", "to": "rich-text-renderer", "type": "data-flow", "description": "全域詞彙索引（可選，供 RichTextRenderer 參考）" },
+    { "from": "llm-config", "to": "i-llm-service", "type": "configures", "description": "LLM Config 配置 ILLMService 實作" },
+
+    { "from": "i-tokenizer", "to": "rich-text-renderer", "type": "data-flow", "description": "RichTextRenderer 呼叫 tokenize(text, shape.terms) 取得 segment 陣列" },
+    { "from": "i-llm-service", "to": "flow-a", "type": "triggered-by", "description": "Flow A 步驟 2 呼叫 ILLMService.explain()" },
+    { "from": "explanation-result.technical_terms", "to": "flow-a.step-3", "type": "data-flow", "description": "LLM 回傳的 technical_terms 寫入新 Shape.props.terms" },
+
+    { "from": "event-boundary", "to": "flow-a", "type": "triggers", "condition": "點到 term" },
+    { "from": "event-boundary", "to": "flow-b", "type": "triggers", "condition": "有 selection" },
+    { "from": "event-boundary", "to": "tldraw-editor", "type": "fallback", "condition": "else" },
+
+    { "from": "flow-a", "to": "flow-c", "type": "triggers", "description": "新 Shape 建立後自動觸發連接線生成" },
+    { "from": "flow-a", "to": "flow-d", "type": "independent-of", "description": "Flow D 與 Flow A 無先後關係，由使用者獨立觸發" },
+    { "from": "flow-b", "to": "flow-d", "type": "independent-of", "description": "Flow D 與 Flow B 無先後關係" },
+
+    { "from": "shape-a", "to": "shape-b", "type": "manual-recursion", "description": "使用者點擊 Shape A 的 term → 生成 Shape B，B 有自己獨立的 terms" }
+  ],
+
+  "design_decisions": [
+    {
+      "id": "dd-01",
+      "topic": "遞迴為手動觸發，非自動",
+      "rationale": "每個名詞解釋後產生的 technical_terms 成為新 Shape 的可點擊項，使用者決定是否繼續點擊。避免無限遞迴、給予使用者控制權"
+    },
+    {
+      "id": "dd-02",
+      "topic": "Terms 作用域為 Shape 等級",
+      "rationale": "每個 ExplainerShape 擁有自己的 terms + userTerms 陣列。刪除 Shape 時 terms 隨之消失，不影響其他 Shape。同名但不同上下文的 term 不會衝突"
+    },
+    {
+      "id": "dd-03",
+      "topic": "EventBoundary 三路分支",
+      "rationale": "pointerUp 時根據狀態走三個路徑：點到 term → Flow A，有選取 → Flow B，否則交給 tldraw default。避免事件劫持導致 tldraw 原生操作失效"
+    },
+    {
+      "id": "dd-04",
+      "topic": "連接線 shape 與 ExplainerShape 綁定生命週期",
+      "rationale": "AnimatedLine 是 tldraw 的自訂 Shape，跟隨 ExplainerShape 一起建立/刪除，避免殘留孤兒線段"
+    }
+  ]
+}

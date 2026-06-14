@@ -1,11 +1,19 @@
 import { defineConfig } from 'vite'
-import react, { reactCompilerPreset } from '@vitejs/plugin-react'
-import babel from '@rolldown/plugin-babel'
 
-// https://vite.dev/config/
+// Vite 8 + Rolldown uses the OXC compiler for JSX by default.
+// The tsconfig sets jsx: "react-jsx" (automatic runtime), so
+// OXC picks it up and handles JSX compilation without needing
+// @vitejs/plugin-react. This avoids the $RefreshSig$ CJS hoisting
+// conflict that occurs when the React plugin's Fast Refresh transform
+// interacts with Rolldown's import hoisting for react/react-dom.
 export default defineConfig({
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] })
-  ],
+  oxc: {
+    jsx: {
+      runtime: 'automatic',
+      importSource: 'react',
+      // Disable Fast Refresh in dev mode to avoid the
+      // "$RefreshSig$ is not defined" CJS hoisting bug.
+      refresh: false,
+    },
+  },
 })

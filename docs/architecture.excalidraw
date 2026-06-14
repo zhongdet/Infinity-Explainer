@@ -1,0 +1,707 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "hermes-agent",
+  "elements": [
+    {
+      "type": "text",
+      "id": "title",
+      "x": 320,
+      "y": 12,
+      "text": "Infinity-Explainer  系統架構總覽",
+      "fontSize": 28,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "originalText": "Infinity-Explainer  系統架構總覽",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "subtitle",
+      "x": 380,
+      "y": 45,
+      "text": "三層模塊 · 純文字介面 · 單向資料流 + 回饋循環",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "strokeColor": "#757575",
+      "originalText": "三層模塊 · 純文字介面 · 單向資料流 + 回饋循環",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "zone1_bg",
+      "x": 30,
+      "y": 70,
+      "width": 1140,
+      "height": 150,
+      "backgroundColor": "#e5dbff",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#8b5cf6",
+      "strokeWidth": 1,
+      "opacity": 30
+    },
+    {
+      "type": "text",
+      "id": "zone1_label",
+      "x": 45,
+      "y": 76,
+      "text": "① 名詞來源與註冊  TermRegistry",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#5b21b6",
+      "originalText": "① 名詞來源與註冊  TermRegistry",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "zone2_bg",
+      "x": 30,
+      "y": 240,
+      "width": 1140,
+      "height": 210,
+      "backgroundColor": "#dbe4ff",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#4a9eed",
+      "strokeWidth": 1,
+      "opacity": 30
+    },
+    {
+      "type": "text",
+      "id": "zone2_label",
+      "x": 45,
+      "y": 246,
+      "text": "② 文本解析與渲染  Tokenizer → TextWindow",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#1e40af",
+      "originalText": "② 文本解析與渲染  Tokenizer → TextWindow",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "zone3_bg",
+      "x": 30,
+      "y": 470,
+      "width": 1140,
+      "height": 210,
+      "backgroundColor": "#d3f9d8",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#22c55e",
+      "strokeWidth": 1,
+      "opacity": 30
+    },
+    {
+      "type": "text",
+      "id": "zone3_label",
+      "x": 45,
+      "y": 476,
+      "text": "③ 解釋生成與回饋循環  LLMService",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#166534",
+      "originalText": "③ 解釋生成與回饋循環  LLMService",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "zone4_bg",
+      "x": 30,
+      "y": 700,
+      "width": 1140,
+      "height": 90,
+      "backgroundColor": "#fff3bf",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#f59e0b",
+      "strokeWidth": 1,
+      "opacity": 25
+    },
+    {
+      "type": "text",
+      "id": "zone4_label",
+      "x": 45,
+      "y": 706,
+      "text": "④ 核心介面定義  Key Interfaces",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#92400e",
+      "originalText": "④ 核心介面定義  Key Interfaces",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "src1",
+      "x": 60,
+      "y": 105,
+      "width": 130,
+      "height": 50,
+      "backgroundColor": "#c3fae8",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#22c55e",
+      "boundElements": [
+        { "id": "t_src1", "type": "text" },
+        { "id": "a_src1_tr", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_src1",
+      "x": 65,
+      "y": 115,
+      "width": 120,
+      "height": 25,
+      "text": "策展清單",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "src1",
+      "originalText": "策展清單",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "src2",
+      "x": 240,
+      "y": 105,
+      "width": 130,
+      "height": 50,
+      "backgroundColor": "#c3fae8",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#22c55e",
+      "boundElements": [
+        { "id": "t_src2", "type": "text" },
+        { "id": "a_src2_tr", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_src2",
+      "x": 245,
+      "y": 115,
+      "width": 120,
+      "height": 25,
+      "text": "用戶選取",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "src2",
+      "originalText": "用戶選取",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "src3",
+      "x": 420,
+      "y": 105,
+      "width": 130,
+      "height": 50,
+      "backgroundColor": "#c3fae8",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#22c55e",
+      "boundElements": [
+        { "id": "t_src3", "type": "text" },
+        { "id": "a_src3_tr", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_src3",
+      "x": 425,
+      "y": 115,
+      "width": 120,
+      "height": 25,
+      "text": "LLM 發現",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "src3",
+      "originalText": "LLM 發現",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "src_note",
+      "x": 80,
+      "y": 90,
+      "text": "名詞來源，三者疊加 (互不衝突)",
+      "fontSize": 13,
+      "fontFamily": 1,
+      "strokeColor": "#757575",
+      "originalText": "名詞來源，三者疊加 (互不衝突)",
+      "autoResize": true
+    },
+
+    {
+      "type": "arrow",
+      "id": "a_src1_tr",
+      "x": 125,
+      "y": 155,
+      "width": 0,
+      "height": 18,
+      "points": [[0,0],[0,18]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "src1", "fixedPoint": [0.5, 1] },
+      "endBinding": { "elementId": "termReg", "fixedPoint": [0.16, 0] }
+    },
+    {
+      "type": "arrow",
+      "id": "a_src2_tr",
+      "x": 305,
+      "y": 155,
+      "width": 0,
+      "height": 18,
+      "points": [[0,0],[0,18]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "src2", "fixedPoint": [0.5, 1] },
+      "endBinding": { "elementId": "termReg", "fixedPoint": [0.5, 0] }
+    },
+    {
+      "type": "arrow",
+      "id": "a_src3_tr",
+      "x": 485,
+      "y": 155,
+      "width": 0,
+      "height": 18,
+      "points": [[0,0],[0,18]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "src3", "fixedPoint": [0.5, 1] },
+      "endBinding": { "elementId": "termReg", "fixedPoint": [0.84, 0] }
+    },
+
+    {
+      "type": "rectangle",
+      "id": "termReg",
+      "x": 80,
+      "y": 173,
+      "width": 490,
+      "height": 42,
+      "backgroundColor": "#d0bfff",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#8b5cf6",
+      "boundElements": [
+        { "id": "t_termReg", "type": "text" },
+        { "id": "a_src1_tr", "type": "arrow" },
+        { "id": "a_src2_tr", "type": "arrow" },
+        { "id": "a_src3_tr", "type": "arrow" },
+        { "id": "a_tr_tok", "type": "arrow" },
+        { "id": "a_llm_tr", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_termReg",
+      "x": 85,
+      "y": 178,
+      "width": 480,
+      "height": 27,
+      "text": "TermRegistry   名詞註冊中心",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "termReg",
+      "originalText": "TermRegistry   名詞註冊中心",
+      "autoResize": true
+    },
+
+    {
+      "type": "arrow",
+      "id": "a_tr_tok",
+      "x": 325,
+      "y": 215,
+      "width": 0,
+      "height": 45,
+      "points": [[0,0],[0,45]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "termReg", "fixedPoint": [0.5, 1] },
+      "endBinding": { "elementId": "tok", "fixedPoint": [0.5, 0] }
+    },
+
+    {
+      "type": "rectangle",
+      "id": "tok",
+      "x": 80,
+      "y": 260,
+      "width": 490,
+      "height": 85,
+      "backgroundColor": "#a5d8ff",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#4a9eed",
+      "boundElements": [
+        { "id": "t_tok", "type": "text" },
+        { "id": "a_tr_tok", "type": "arrow" },
+        { "id": "a_tok_tw", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_tok",
+      "x": 85,
+      "y": 267,
+      "width": 480,
+      "height": 27,
+      "text": "Tokenizer   文本 → 單位字元序列",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "tok",
+      "originalText": "Tokenizer   文本 → 單位字元序列",
+      "autoResize": true
+    },
+    {
+      "type": "text",
+      "id": "tok_note",
+      "x": 110,
+      "y": 300,
+      "text": "TextSegment[] = tokenize(rawText, knownTerms)   // longest-match-first",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#1e40af",
+      "originalText": "TextSegment[] = tokenize(rawText, knownTerms)   // longest-match-first",
+      "autoResize": true
+    },
+
+    {
+      "type": "arrow",
+      "id": "a_tok_tw",
+      "x": 570,
+      "y": 302,
+      "width": 70,
+      "height": 0,
+      "points": [[0,0],[70,0]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "tok", "fixedPoint": [1, 0.5] },
+      "endBinding": { "elementId": "tw", "fixedPoint": [0, 0.5] }
+    },
+
+    {
+      "type": "rectangle",
+      "id": "tw",
+      "x": 640,
+      "y": 255,
+      "width": 500,
+      "height": 185,
+      "backgroundColor": "#fff3bf",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#f59e0b",
+      "boundElements": [
+        { "id": "t_tw", "type": "text" },
+        { "id": "a_tok_tw", "type": "arrow" },
+        { "id": "a_tw_llm", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_tw",
+      "x": 645,
+      "y": 262,
+      "width": 490,
+      "height": 27,
+      "text": "TextWindow (ExplainerShape)",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "tw",
+      "originalText": "TextWindow (ExplainerShape)",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "tw_eb",
+      "x": 660,
+      "y": 298,
+      "width": 460,
+      "height": 60,
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#f59e0b",
+      "strokeWidth": 1,
+      "boundElements": [{ "id": "t_tw_eb", "type": "text" }]
+    },
+    {
+      "type": "text",
+      "id": "t_tw_eb",
+      "x": 665,
+      "y": 303,
+      "width": 450,
+      "height": 45,
+      "text": "EventBoundary  接管 pointer 事件\nonClick(term)  → 請求解釋  |  onSelect(text)  → 標為新名詞",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "tw_eb",
+      "originalText": "EventBoundary  接管 pointer 事件\nonClick(term)  → 請求解釋  |  onSelect(text)  → 標為新名詞",
+      "autoResize": true
+    },
+
+    {
+      "type": "rectangle",
+      "id": "tw_rr",
+      "x": 660,
+      "y": 368,
+      "width": 460,
+      "height": 55,
+      "backgroundColor": "#ffffff",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#f59e0b",
+      "strokeWidth": 1,
+      "boundElements": [{ "id": "t_tw_rr", "type": "text" }]
+    },
+    {
+      "type": "text",
+      "id": "t_tw_rr",
+      "x": 665,
+      "y": 377,
+      "width": 450,
+      "height": 28,
+      "text": "RichTextRenderer   渲染 TextSegment[] → 普通文字 + 可點擊高亮名詞",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "tw_rr",
+      "originalText": "RichTextRenderer   渲染 TextSegment[] → 普通文字 + 可點擊高亮名詞",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "tw_note",
+      "x": 665,
+      "y": 285,
+      "text": "props: { text: string, userTerms: string[] }   // 純文字，不存位置",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "strokeColor": "#92400e",
+      "originalText": "props: { text: string, userTerms: string[] }   // 純文字，不存位置",
+      "autoResize": true
+    },
+
+    {
+      "type": "arrow",
+      "id": "a_tw_llm",
+      "x": 890,
+      "y": 440,
+      "width": 0,
+      "height": 55,
+      "points": [[0,0],[0,55]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "tw", "fixedPoint": [0.5, 1] },
+      "endBinding": { "elementId": "llm", "fixedPoint": [0.5, 0] }
+    },
+
+    {
+      "type": "rectangle",
+      "id": "llm",
+      "x": 290,
+      "y": 495,
+      "width": 560,
+      "height": 85,
+      "backgroundColor": "#ffd8a8",
+      "fillStyle": "solid",
+      "roundness": { "type": 3 },
+      "strokeColor": "#f59e0b",
+      "boundElements": [
+        { "id": "t_llm", "type": "text" },
+        { "id": "a_tw_llm", "type": "arrow" },
+        { "id": "a_llm_tr", "type": "arrow" }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "t_llm",
+      "x": 295,
+      "y": 500,
+      "width": 550,
+      "height": 27,
+      "text": "LLMService   解釋生成器 (OpenAI 相容 API)",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "llm",
+      "originalText": "LLMService   解釋生成器 (OpenAI 相容 API)",
+      "autoResize": true
+    },
+    {
+      "type": "text",
+      "id": "llm_note",
+      "x": 310,
+      "y": 535,
+      "text": "explain(term)  →  { explanation: string, technicalTerms: string[] }",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#9a5030",
+      "originalText": "explain(term)  →  { explanation: string, technicalTerms: string[] }",
+      "autoResize": true
+    },
+
+    {
+      "type": "arrow",
+      "id": "a_llm_tr",
+      "x": 570,
+      "y": 535,
+      "width": 80,
+      "height": -362,
+      "points": [[0,0],[80,0],[80,-362],[0,-362]],
+      "endArrowhead": "arrow",
+      "startBinding": { "elementId": "llm", "fixedPoint": [1, 0.47] },
+      "endBinding": { "elementId": "termReg", "fixedPoint": [1, 0.5] }
+    },
+    {
+      "type": "text",
+      "id": "t_fb",
+      "x": 585,
+      "y": 380,
+      "width": 130,
+      "height": 25,
+      "text": "registerLLMTerms()",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#9a5030",
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "originalText": "registerLLMTerms()",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "t_cycle",
+      "x": 50,
+      "y": 595,
+      "text": "遞歸循環：原始文本 → 名詞高亮 → 點擊名詞 → LLM 生成解釋 → 新文本窗 → 新名詞高亮 → ...",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "strokeColor": "#166534",
+      "originalText": "遞歸循環：原始文本 → 名詞高亮 → 點擊名詞 → LLM 生成解釋 → 新文本窗 → 新名詞高亮 → ...",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "t_cycle2",
+      "x": 50,
+      "y": 618,
+      "text": "每次 LLM 回傳時，technicalTerms[] 自動註冊進 TermRegistry → 下層窗口自動識別新名詞 (無限遞歸)",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#757575",
+      "originalText": "每次 LLM 回傳時，technicalTerms[] 自動註冊進 TermRegistry → 下層窗口自動識別新名詞 (無限遞歸)",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "i1",
+      "x": 55,
+      "y": 720,
+      "text": "type TextSegment = { kind: 'text', content: string } | { kind: 'term', content: string }",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "originalText": "type TextSegment = { kind: 'text', content: string } | { kind: 'term', content: string }",
+      "autoResize": true
+    },
+    {
+      "type": "text",
+      "id": "i2",
+      "x": 55,
+      "y": 738,
+      "text": "interface ITermRegistry { isTerm(text): bool, getSortedTerms(): string[], register*(term, source?): void }",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "originalText": "interface ITermRegistry { isTerm(text): bool, getSortedTerms(): string[], register*(term, source?): void }",
+      "autoResize": true
+    },
+    {
+      "type": "text",
+      "id": "i3",
+      "x": 55,
+      "y": 756,
+      "text": "interface ILLMService { explain(term): Promise<{ explanation: string, technicalTerms: string[] }> }",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "strokeColor": "#1e1e1e",
+      "originalText": "interface ILLMService { explain(term): Promise<{ explanation: string, technicalTerms: string[] }> }",
+      "autoResize": true
+    },
+
+    {
+      "type": "text",
+      "id": "more_src",
+      "x": 640,
+      "y": 95,
+      "text": "source: 'curated' | 'user' | 'llm'",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "strokeColor": "#757575",
+      "originalText": "source: 'curated' | 'user' | 'llm'",
+      "autoResize": true
+    },
+    {
+      "type": "text",
+      "id": "more_src2",
+      "x": 640,
+      "y": 112,
+      "text": "userTerms 綁定在 shapeId 上，刪 shape 時清除",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "strokeColor": "#757575",
+      "originalText": "userTerms 綁定在 shapeId 上，刪 shape 時清除",
+      "autoResize": true
+    },
+    {
+      "type": "text",
+      "id": "more_src3",
+      "x": 640,
+      "y": 129,
+      "text": "curated 內建不可刪，llm terms 全域共享",
+      "fontSize": 12,
+      "fontFamily": 1,
+      "strokeColor": "#757575",
+      "originalText": "curated 內建不可刪，llm terms 全域共享",
+      "autoResize": true
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#ffffff"
+  }
+}
