@@ -21,16 +21,139 @@ function saveConfig(cfg: LLMConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg))
 }
 
-function buildPrompt(term: string, context?: string): string {
+/* ── 非串流 prompt：回傳完整 JSON（跟串流前一樣） ── */
+
+function buildJSONPrompt(term: string, context?: string): string {
   const ctx = context ? `（上下文：${context}）` : ''
   return `你是一個技術解釋助手。請用繁體中文、淺顯易懂的方式解釋「${term}」${ctx}。
-直接輸出解釋文字，不需要 JSON 包裝。解釋時如果提到其他技術名詞，請用「」標註起來。`
+解釋中如包含其他技術名詞，請一併列出。
+
+請嚴格以 JSON 格式回覆，格式如下：
+{
+  "explanation": "繁體中文解釋文字",
+  "technical_terms": ["名詞1", "名詞2"]
+}
+
+只回覆 JSON，不要包含其他文字。`
+}
+
+/* ── 串流 prompt：先輸出解釋文字，再用分隔線標記 technical_terms ── */
+
+function buildStreamPrompt(term: string, context?: string): string {
+  const ctx = context ? `（上下文：${context}）` : ''
+  return `你是一個技術解釋助手。請用繁體中文、淺顯易懂的方式解釋「${term}」${ctx}。
+
+先直接輸出解釋文字（純文字、不要 JSON）。
+解釋完畢後換行，然後輸出「---TERMS---」，
+再下一行輸出一個 JSON 陣列，列出你解釋中出現的關鍵技術名詞。
+
+輸出格式：
+...解釋文字...
+---TERMS---
+["名詞1", "名詞2"]`
+}
+
+/* ── Parse helpers ── */
+
+/**
+ * 從完整的 LLM 回應中分割 explanation + technical_terms。
+ * 支援兩種格式：
+ * 1. 完整 JSON 物件（非串流舊格式）
+ * 2. 純文字 + ---TERMS--- + JSON 陣列（串流新格式）
+ */
+function parseResult(raw: string): ExplanationResult {
+  // 先嘗試當完整 JSON 解析（非串流）
+  const jsonObj = tryParseJSONObject(raw)
+  if (jsonObj && typeof jsonObj.explanation === 'string') {
+    return {
+      explanation: jsonObj.explanation,
+      technical_terms: Array.isArray(jsonObj.technical_terms)
+        ? jsonObj.technical_terms.filter((t: unknown) => typeof t === 'string')
+        : [],
+    }
+  }
+
+  // 嘗試 ---TERMS--- 分隔格式
+  const marker = '---TERMS---'
+  const markerIdx = raw.indexOf(marker)
+  if (markerIdx !== -1) {
+    const explanation = raw.slice(0, markerIdx).trim()
+    const termsPart = raw.slice(markerIdx + marker.length).trim()
+    const terms = tryParseJSONArray(termsPart)
+    return { explanation, technical_terms: terms }
+  }
+
+  // Fallback：整段當解釋，從文字中 heuristic 提取 terms
+  return { explanation: raw.trim(), technical_terms: extractTerms(raw) }
 }
 
 /**
- * 從純文字解釋中提取 technical_terms：
- * - 匹配「」內的文字
- * - 匹配大寫字母開頭的英文技術名詞（含連字號、斜線）
+ * 串流過程中提取「到目前為止的純解釋文字」：
+ * 回傳 accumulated 中在 ---TERMS--- 之前的部分
+ */
+function extractDisplayText(raw: string): string {
+  const marker = '---TERMS---'
+  const idx = raw.indexOf(marker)
+  return idx !== -1 ? raw.slice(0, idx) : raw
+}
+
+function tryParseJSONObject(text: string): Record<string, unknown> | null {
+  // Try direct parse
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch { /* fall through */ }
+
+  // Try extracting JSON block from markdown
+  const blockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (blockMatch) {
+    try {
+      return JSON.parse(blockMatch[1].trim()) as Record<string, unknown>
+    } catch { /* fall through */ }
+  }
+
+  // Try finding { } block
+  const braceMatch = text.match(/\{[\s\S]*\}/)
+  if (braceMatch) {
+    try {
+      return JSON.parse(braceMatch[0]) as Record<string, unknown>
+    } catch { /* fall through */ }
+  }
+
+  return null
+}
+
+function tryParseJSONArray(text: string): string[] {
+  const trimmed = text.trim()
+
+  // Direct parse
+  try {
+    const arr = JSON.parse(trimmed)
+    if (Array.isArray(arr)) return arr.filter((t): t is string => typeof t === 'string')
+  } catch { /* fall through */ }
+
+  // Allow markdown fences
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\[([\s\S]*?)\]```/)
+  if (fenceMatch) {
+    try {
+      const arr = JSON.parse(`[${fenceMatch[1]}]`)
+      if (Array.isArray(arr)) return arr.filter((t): t is string => typeof t === 'string')
+    } catch { /* fall through */ }
+  }
+
+  // Allow square brackets without markdown
+  const bracketMatch = trimmed.match(/\[[\s\S]*\]/)
+  if (bracketMatch) {
+    try {
+      const arr = JSON.parse(bracketMatch[0])
+      if (Array.isArray(arr)) return arr.filter((t): t is string => typeof t === 'string')
+    } catch { /* fall through */ }
+  }
+
+  return []
+}
+
+/**
+ * Heuristic term extraction（作為最後 fallback）
  */
 function extractTerms(text: string): string[] {
   const set = new Set<string>()
@@ -40,13 +163,17 @@ function extractTerms(text: string): string[] {
     const t = m[1].trim()
     if (t.length >= 2) set.add(t)
   }
-  // 大寫開頭的英文技術名詞（含 CamelCase、連字號）
+  // 大寫開頭的英文技術名詞
   const engRe = /[A-Z][a-zA-Z0-9/-]{1,60}/g
   for (const m of text.matchAll(engRe)) {
     set.add(m[0])
   }
   return [...set]
 }
+
+/* ============================================================
+   LLMService 實作
+   ============================================================ */
 
 export class LLMService implements ILLMService {
   private config: LLMConfig
@@ -64,6 +191,7 @@ export class LLMService implements ILLMService {
     return { ...this.config }
   }
 
+  /** 非串流：沿用原始 JSON prompt，等待完整回應後解析 */
   async explain(term: string, context?: string): Promise<ExplanationResult> {
     if (this.config.provider === 'disabled') {
       return {
@@ -72,7 +200,7 @@ export class LLMService implements ILLMService {
       }
     }
 
-    const prompt = buildPrompt(term, context)
+    const prompt = buildJSONPrompt(term, context)
     const { endpoint, model, apiKey } = this.config
 
     const response = await fetch(`${endpoint}/chat/completions`, {
@@ -100,11 +228,10 @@ export class LLMService implements ILLMService {
 
     const data = await response.json()
     const content: string = data.choices?.[0]?.message?.content ?? ''
-    const terms = extractTerms(content)
-
-    return { explanation: content, technical_terms: terms }
+    return parseResult(content)
   }
 
+  /** 串流：先顯示解釋文字，串流結束後解析 technical_terms */
   async explainStream(
     term: string,
     onProgress: (fullText: string) => void,
@@ -117,7 +244,7 @@ export class LLMService implements ILLMService {
       return { explanation: msg, technical_terms: [] }
     }
 
-    const prompt = buildPrompt(term, context)
+    const prompt = buildStreamPrompt(term, context)
     const { endpoint, model, apiKey } = this.config
 
     const response = await fetch(`${endpoint}/chat/completions`, {
@@ -141,7 +268,6 @@ export class LLMService implements ILLMService {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => 'Unknown error')
-      // Still report partial progress if any
       throw new Error(`LLM API error (${response.status}): ${errText}`)
     }
 
@@ -156,9 +282,8 @@ export class LLMService implements ILLMService {
 
       buffer += decoder.decode(value, { stream: true })
 
-      // SSE format: "data: {...}\n\n"
+      // SSE: "data: {...}\n\n"
       const lines = buffer.split('\n')
-      // Keep the last (potentially incomplete) line in buffer
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
@@ -171,27 +296,27 @@ export class LLMService implements ILLMService {
           const delta: string | undefined = json.choices?.[0]?.delta?.content
           if (delta) {
             accumulated += delta
-            onProgress(accumulated)
+            // Pass display text (strip everything after ---TERMS---)
+            onProgress(extractDisplayText(accumulated))
           }
         } catch {
-          // Skip malformed JSON lines (e.g. trailing metadata)
+          // Skip malformed JSON lines
         }
       }
     }
 
-    // Process any remaining buffer
+    // Process remaining buffer
     if (buffer.startsWith('data: ') && buffer !== 'data: [DONE]') {
       try {
         const json = JSON.parse(buffer.slice(6))
         const delta: string | undefined = json.choices?.[0]?.delta?.content
         if (delta) {
           accumulated += delta
-          onProgress(accumulated)
+          onProgress(extractDisplayText(accumulated))
         }
       } catch { /* skip */ }
     }
 
-    const terms = extractTerms(accumulated)
-    return { explanation: accumulated, technical_terms: terms }
+    return parseResult(accumulated)
   }
 }
