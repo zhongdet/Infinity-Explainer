@@ -11,34 +11,29 @@ interface Props {
 /**
  * SelectionPopover — 在 ExplainerShape 內選取文字後出現的浮動工具列。
  *
- * 內部監聽 document.selectionchange 事件，不需要外部觸發。
- * 使用 openDelay / closeDelay 避免閃爍。
+ * 使用方式：
+ * ```tsx
+ * <SelectionPopover shapeId={shape.id} onConfirm={handleConfirm} />
+ * ```
+ *
+ * 靈感來自 radix-ui/selection-popover 的設計模式：
+ * - 監聽 selectionchange 事件（不限滑鼠/鍵盤）
+ * - openDelay / closeDelay 避免閃爍
+ * - ESC / scroll / click-outside 關閉
  */
 export function SelectionPopover({ shapeId, onConfirm }: Props) {
   const [state, setState] = useState<{
     text: string
     rect: DOMRect
   } | null>(null)
-  const [visible, setVisible] = useState(false)
-  const [coords, setCoords] = useState({ top: 0, left: 0 })
-
   const openTimerRef = useRef<number>(0)
   const closeTimerRef = useRef<number>(0)
   const popoverRef = useRef<HTMLDivElement>(null)
-  /** 同步 tracking 供 closure 內讀取 visibile 狀態 */
-  const visibleRef = useRef(false)
+  const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const [visible, setVisible] = useState(false)
 
   const OPEN_DELAY = 150
   const CLOSE_DELAY = 200
-
-  // ── 統一的關閉方法 ──
-  const doClose = useCallback(() => {
-    visibleRef.current = false
-    setVisible(false)
-    closeTimerRef.current = window.setTimeout(() => {
-      setState(null)
-    }, CLOSE_DELAY)
-  }, [])
 
   // ── 監聽 selectionchange ──
   useEffect(() => {
@@ -46,25 +41,22 @@ export function SelectionPopover({ shapeId, onConfirm }: Props) {
     if (!containerEl) return
 
     const handleSelectionChange = () => {
-      // Popover 已開啟時，不自動關閉（讓使用者有時間點擊按鈕）
-      if (visibleRef.current) return
-
+      console.log('[test] selection ')
       const sel = window.getSelection()
       if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
+        // 選取消失 → 延遲關閉
         clearTimeout(openTimerRef.current)
         closeTimerRef.current = window.setTimeout(() => {
-          visibleRef.current = false
-          setVisible(false)
           setState(null)
+          setVisible(false)
         }, CLOSE_DELAY)
         return
       }
 
       // 確認選取範圍在 container 內
       if (!containerEl.contains(sel.anchorNode)) {
-        visibleRef.current = false
-        setVisible(false)
         setState(null)
+        setVisible(false)
         return
       }
 
@@ -76,9 +68,8 @@ export function SelectionPopover({ shapeId, onConfirm }: Props) {
       const range = sel.getRangeAt(0)
       const rect = range.getBoundingClientRect()
 
-      clearTimeout(openTimerRef.current)
+      // 延遲開啟（避免短暫 hover 觸發）
       openTimerRef.current = window.setTimeout(() => {
-        visibleRef.current = true
         setState({ text, rect })
         setVisible(true)
       }, OPEN_DELAY)
@@ -94,39 +85,46 @@ export function SelectionPopover({ shapeId, onConfirm }: Props) {
 
   // ── 定位計算（viewport 碰撞處理） ──
   useEffect(() => {
-    if (!state || !visible) return
+    if (!state) return
 
     const popoverWidth = 220
     const popoverHeight = 40
-    const gap = 8
+    const gap = 8 // 與選取區的間距
 
     const preferredTop = state.rect.top - popoverHeight - gap
     const preferredBottom = state.rect.bottom + gap
     const centerX = state.rect.left + state.rect.width / 2
 
-    const top = preferredTop < 8 ? preferredBottom : preferredTop
-    const left = Math.max(8, Math.min(centerX - popoverWidth / 2, window.innerWidth - popoverWidth - 8))
+    let top: number
+    if (preferredTop < 8) {
+      top = preferredBottom
+    } else {
+      top = preferredTop
+    }
+
+    let left = centerX - popoverWidth / 2
+    left = Math.max(8, Math.min(left, window.innerWidth - popoverWidth - 8))
 
     setCoords({ top, left })
-  }, [state, visible])
+  }, [state])
 
   // ── ESC 關閉 ──
   useEffect(() => {
     if (!visible) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        doClose()
+        setState(null)
+        setVisible(false)
         window.getSelection()?.removeAllRanges()
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [visible, doClose])
+  }, [visible])
 
   // ── 按鈕點擊 ──
   const handleConfirm = useCallback(() => {
     if (!state) return
-    visibleRef.current = false
     onConfirm(state.text)
     setState(null)
     setVisible(false)
@@ -138,13 +136,20 @@ export function SelectionPopover({ shapeId, onConfirm }: Props) {
     if (!visible) return
     const handler = (e: MouseEvent) => {
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        doClose()
+        // 點擊 popover 外部 → 關閉但不清除選取（使用者可以繼續選）
+        setVisible(false)
+        // 延遲清除 state，讓 selectionchange 有機會重新觸發
+        closeTimerRef.current = window.setTimeout(() => {
+          setState(null)
+        }, CLOSE_DELAY)
       }
     }
-    // Native click listener (not React) so we can check before React re-renders
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [visible, doClose])
+    const id = setTimeout(() => document.addEventListener('click', handler), 0)
+    return () => {
+      clearTimeout(id)
+      document.removeEventListener('click', handler)
+    }
+  }, [visible])
 
   if (!state || !visible) return null
 
