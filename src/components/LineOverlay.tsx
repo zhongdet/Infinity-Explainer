@@ -70,7 +70,7 @@ export function LineOverlay({ editor }: { editor: Editor }) {
         height: '100%',
         pointerEvents: 'none',
         overflow: 'visible',
-        transform: `scale(${camera.z}) translate(${-camera.x}px, ${-camera.y}px)`,
+        transform: `translate(${-camera.x}px, ${-camera.y}px) scale(${camera.z})`,
         transformOrigin: 'top left',
       }}
     >
