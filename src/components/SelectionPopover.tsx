@@ -38,14 +38,34 @@ export function SelectionPopover({ editor }: Props) {
     }, CLOSE_DELAY)
   }, [])
 
+  // ── 用 ref 同步 state 讓 closure 可讀取當前內容 ──
+  const stateRef = useRef(state)
+  stateRef.current = state
+
   // ── 監聽 selectionchange ──
   useEffect(() => {
     const handleSelectionChange = () => {
-      // Popover 已開啟時不干擾
-      if (visible) return
-
       const sel = window.getSelection()
-      if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
+      const hasSel = sel && !sel.isCollapsed && sel.toString().trim().length > 0
+
+      if (visible) {
+        // Popover 已開啟 → 永不自動關閉
+        // 但如果是新的選取（文字不同），更新內容
+        if (hasSel) {
+          const t = sel!.toString().trim()
+          const rootEl = sel!.anchorNode?.parentElement?.closest('[data-shape-root]') as HTMLElement | null
+          if (rootEl && t !== stateRef.current?.text) {
+            const sid = rootEl.getAttribute('data-shape-root') ?? ''
+            const range = sel!.getRangeAt(0)
+            clearTimeout(closeTimerRef.current)
+            setState({ shapeId: sid, text: t, rect: range.getBoundingClientRect() })
+          }
+        }
+        return
+      }
+
+      // Popover 關閉中 ── 正常邏輯
+      if (!hasSel) {
         clearTimeout(openTimerRef.current)
         closeTimerRef.current = window.setTimeout(() => {
           setState(null)

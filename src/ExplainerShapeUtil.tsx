@@ -254,8 +254,9 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
       const anchorX = sourceW > 0 ? localPoint.x / sourceW : 0.5
       const anchorY = sourceH > 0 ? localPoint.y / sourceH : 0.5
 
+      const lineId = createShapeId()
       editor.createShape({
-        id: createShapeId(),
+        id: lineId,
         type: 'animatedLine' as any,
         x: 0,
         y: 0,
@@ -268,6 +269,8 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
           endAnchorY: 0.5,
         },
       })
+      // 把連接線移到最底層，讓文字窗覆蓋在線條上方
+      editor.sendToBack([lineId])
 
       // 5. Stream LLM response into the new shape
       abortRef.current?.abort()
