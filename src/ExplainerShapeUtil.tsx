@@ -145,6 +145,9 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
   const editor = useEditor()
   const tokenizerRef = useRef(new Tokenizer())
   const [loadingTerm, setLoadingTerm] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -178,6 +181,44 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
       termRegistry.deregisterShape(shape.id)
     }
   }, [shape.id, allTerms, termRegistry])
+
+  /* ---- Edit Mode: 雙擊進入文字編輯 ---- */
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setEditText(shape.props.text)
+    setEditing(true)
+  }, [shape.props.text])
+
+  const handleSaveEdit = useCallback(() => {
+    if (editText !== shape.props.text) {
+      editor.updateShape({
+        id: shape.id as TLShapeId,
+        type: 'explainer' as any,
+        props: { text: editText },
+      })
+    }
+    setEditing(false)
+  }, [editor, shape.id, editText, shape.props.text])
+
+  const handleCancelEdit = useCallback(() => {
+    setEditing(false)
+    setEditText('')
+  }, [])
+
+  const handleEditKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation()
+      handleCancelEdit()
+    }
+    e.stopPropagation()
+  }, [handleCancelEdit])
+
+  // Auto-focus textarea when entering edit mode
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus()
+    }
+  }, [editing])
 
   /* ---- Flow A: 點擊名詞 → 立即建立 Shape + 串流 LLM 解釋 ---- */
   const handleTermClick = useCallback(
@@ -386,12 +427,40 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
         position: 'relative',
       }}
     >
-      <div ref={containerRef} data-shape-root={shape.id} style={{ position: 'relative', width: '100%', height: '100%' }}>
-        <RichTextRenderer
-          segments={segments}
-          clickableTerms={clickableTermSet}
-          onTermClick={handleTermClick}
-        />
+      <div ref={containerRef} data-shape-root={shape.id} onDoubleClick={handleDoubleClick} style={{ position: 'relative', width: '100%', height: '100%' }}>
+        {editing ? (
+          <textarea
+            ref={textareaRef}
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onBlur={handleSaveEdit}
+            onKeyDown={handleEditKeyDown}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              height: '100%',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              fontFamily: 'system-ui, sans-serif',
+              fontSize: 16,
+              lineHeight: 1.6,
+              color: '#1f2937',
+              backgroundColor: 'transparent',
+              padding: 0,
+              margin: 0,
+              boxSizing: 'border-box',
+              whiteSpace: 'pre-wrap',
+              overflow: 'auto',
+            }}
+          />
+        ) : (
+          <RichTextRenderer
+            segments={segments}
+            clickableTerms={clickableTermSet}
+            onTermClick={handleTermClick}
+          />
+        )}
       </div>
     </HTMLContainer>
   )
