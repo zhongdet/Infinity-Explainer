@@ -54,6 +54,7 @@ function findPosition(
   baseAngle: number,
   checkCollision: (cx: number, cy: number) => boolean,
   initialRadius = 0,
+  sourceBounds?: { minX: number; minY: number; maxX: number; maxY: number },
 ): { x: number; y: number } | null {
   let radius = initialRadius || 140
   let searchStep = 0
@@ -65,11 +66,27 @@ function findPosition(
   for (let attempts = 0; attempts < maxAttempts; attempts++) {
     const angleOffset = Math.sin(searchStep * 2) * (sweepRange / 2)
     const currentAngle = baseAngle + angleOffset
-    const cx = centerX + Math.cos(currentAngle) * radius
-    const cy = centerY + Math.sin(currentAngle) * radius
 
-    if (!checkCollision(cx, cy)) {
-      return { x: cx, y: cy }
+    // 動態半徑：同一角度逐步增加半徑，先避開來源窗，再避開其他窗
+    for (let r = radius; r < radius + 500; r += radiusStep) {
+      const cx = centerX + Math.cos(currentAngle) * r
+      const cy = centerY + Math.sin(currentAngle) * r
+
+      // Phase 1: 動態計算避免與來源窗碰撞
+      if (sourceBounds) {
+        const testBounds = {
+          minX: cx - 180, // W/2 = 180
+          minY: cy - 120, // H/2 = 120
+          maxX: cx + 180,
+          maxY: cy + 120,
+        }
+        if (boundsCollide(testBounds, sourceBounds, 0)) continue
+      }
+
+      // Phase 2: 與所有其他文字窗碰撞判定（透過 callback）
+      if (!checkCollision(cx, cy)) {
+        return { x: cx, y: cy }
+      }
     }
 
     radius += radiusStep
@@ -263,7 +280,7 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
 
       const initialRadius =
         Math.max(sourceBounds.width, sourceBounds.height) / 2 + 50
-      const pos = findPosition(searchCenterX, searchCenterY, baseAngle, checkCollision, initialRadius)
+      const pos = findPosition(searchCenterX, searchCenterY, baseAngle, checkCollision, initialRadius, sourceBounds)
 
       const newX = pos ? pos.x - W / 2 : searchCenterX + 150
       const newY = pos ? pos.y - H / 2 : searchCenterY + 100
