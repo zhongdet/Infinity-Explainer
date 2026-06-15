@@ -338,6 +338,29 @@ function ExplainerShapeComponent({ shape }: { shape: ExplainerShape }) {
   /* ---- Flow B: 選取文字 → SelectionPopover（由 SelectionPopover 內部監聽 selectionchange） ---- */
   /* ---- Flow B: 選取文字 → SelectionPopover 移至 App 層級 ---- */
 
+  /* ---- 滾輪事件：內容可滾動時優先於 tldraw 縮放 ---- */
+  // 使用 native addEventListener 搭配 capture phase，
+  // 比 tldraw 的 document-level wheel handler 更早攔截
+  useEffect(() => {
+    const el = containerRef.current?.parentElement
+    if (!el) return
+
+    const handler = (e: WheelEvent) => {
+      const atTop = el.scrollTop <= 0
+      const atBottom =
+        el.scrollHeight - el.scrollTop <= el.clientHeight + 1
+      const scrollingDown = e.deltaY > 0
+      const scrollingUp = e.deltaY < 0
+
+      if ((scrollingDown && !atBottom) || (scrollingUp && !atTop)) {
+        e.stopPropagation()
+      }
+    }
+
+    el.addEventListener('wheel', handler, { capture: true })
+    return () => el.removeEventListener('wheel', handler, { capture: true } as EventListenerOptions)
+  }, [])
+
   /* ---- Render ---- */
   // Use a wrapper div inside HTMLContainer to get a ref
   return (
