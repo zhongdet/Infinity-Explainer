@@ -29,20 +29,22 @@ const AnimatedLineRenderer = track(({ shape }: { shape: AnimatedLineShape }) => 
   const shapeIdRef = useRef(shape.id)
   shapeIdRef.current = shape.id
 
-  // Auto-delete lifecycle
+  // Auto-delete: 當連接的 shape 被刪除時自動移除線條
   useEffect(() => {
-    const unsub = editor.store.listen(() => {
-      const s1 = editor.getShape(shape.props.startId as TLShapeId)
-      const s2 = editor.getShape(shape.props.endId as TLShapeId)
-      if (!s1 || !s2) {
-        setTimeout(() => {
-          if (editor.getShape(shapeIdRef.current)) {
-            editor.deleteShape(shapeIdRef.current)
+    const cleanup = editor.sideEffects.registerAfterDeleteHandler('shape', (deletedShape) => {
+      const lineId = shapeIdRef.current
+      if (
+        deletedShape.id === shape.props.startId ||
+        deletedShape.id === shape.props.endId
+      ) {
+        requestAnimationFrame(() => {
+          if (editor.getShape(lineId)) {
+            editor.deleteShape(lineId)
           }
-        }, 0)
+        })
       }
     })
-    return unsub
+    return cleanup
   }, [editor, shape.props.startId, shape.props.endId])
 
   // Read connected shape bounds
