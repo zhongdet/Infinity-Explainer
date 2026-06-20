@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import type { Editor, TLShapeId } from 'tldraw'
 
 interface Props {
-  editor: Editor | null
+  onMarkTerm: (shapeId: string, text: string) => void
 }
 
 /**
- * SelectionPopover — 在 App 層級渲染的全域選取工具列。
+ * SelectionPopover — 在全域 App 層級渲染的選取工具列。
  *
- * 監聽 selectionchange 事件，當選取發生在任意 ExplainerShape 內時，
+ * 監聽 selectionchange 事件，當選取發生在 data-node-root 容器內時，
  * 在選取區上方顯示「標記為名詞」按鈕。
  *
- * 容器判斷：查找選取錨點的最近祖先是否有 data-shape-root 屬性。
+ * 使用 position: fixed 的 div，不透過 createPortal。
  */
-export function SelectionPopover({ editor }: Props) {
+export function SelectionPopover({ onMarkTerm }: Props) {
   const [state, setState] = useState<{
-    shapeId: string
+    nodeId: string
     text: string
     rect: DOMRect
   } | null>(null)
@@ -30,7 +28,7 @@ export function SelectionPopover({ editor }: Props) {
   const OPEN_DELAY = 150
   const CLOSE_DELAY = 200
 
-  // ── 統一的關閉方法 ──
+  // 統一的關閉方法
   const doClose = useCallback(() => {
     setVisible(false)
     closeTimerRef.current = window.setTimeout(() => {
@@ -38,11 +36,11 @@ export function SelectionPopover({ editor }: Props) {
     }, CLOSE_DELAY)
   }, [])
 
-  // ── 用 ref 同步 state 讓 closure 可讀取當前內容 ──
+  // 用 ref 同步 state 讓 closure 可讀取當前內容
   const stateRef = useRef(state)
   stateRef.current = state
 
-  // ── 監聽 selectionchange ──
+  // 監聽 selectionchange
   useEffect(() => {
     const handleSelectionChange = () => {
       const sel = window.getSelection()
@@ -51,17 +49,15 @@ export function SelectionPopover({ editor }: Props) {
       if (visible) {
         // Popover 已開啟
         if (hasSel) {
-          // 使用者選取了新的文字 → 更新內容
           const t = sel!.toString().trim()
-          const rootEl = sel!.anchorNode?.parentElement?.closest('[data-shape-root]') as HTMLElement | null
+          const rootEl = sel!.anchorNode?.parentElement?.closest('[data-node-root]') as HTMLElement | null
           if (rootEl && t !== stateRef.current?.text) {
-            const sid = rootEl.getAttribute('data-shape-root') ?? ''
+            const sid = rootEl.getAttribute('data-node-root') ?? ''
             const range = sel!.getRangeAt(0)
             clearTimeout(closeTimerRef.current)
-            setState({ shapeId: sid, text: t, rect: range.getBoundingClientRect() })
+            setState({ nodeId: sid, text: t, rect: range.getBoundingClientRect() })
           }
         } else {
-          // 選取消失了 → 關閉 popover
           setVisible(false)
           closeTimerRef.current = window.setTimeout(() => {
             setState(null)
@@ -70,7 +66,7 @@ export function SelectionPopover({ editor }: Props) {
         return
       }
 
-      // Popover 關閉中 ── 正常邏輯
+      // Popover 關閉中
       if (!hasSel) {
         clearTimeout(openTimerRef.current)
         closeTimerRef.current = window.setTimeout(() => {
@@ -80,28 +76,28 @@ export function SelectionPopover({ editor }: Props) {
         return
       }
 
-      // 確認選取範圍在 data-shape-root 容器內
-      const rootEl = sel.anchorNode?.parentElement?.closest('[data-shape-root]') as HTMLElement | null
+      // 確認選取範圍在 data-node-root 容器內
+      const rootEl = sel!.anchorNode?.parentElement?.closest('[data-node-root]') as HTMLElement | null
       if (!rootEl) {
         setState(null)
         setVisible(false)
         return
       }
 
-      const shapeId = rootEl.getAttribute('data-shape-root') ?? ''
-      if (!shapeId) return
+      const nodeId = rootEl.getAttribute('data-node-root') ?? ''
+      if (!nodeId) return
 
-      const text = sel.toString().trim()
+      const text = sel!.toString().trim()
       if (text.length === 0) return
 
       clearTimeout(closeTimerRef.current)
       clearTimeout(openTimerRef.current)
 
-      const range = sel.getRangeAt(0)
+      const range = sel!.getRangeAt(0)
       const rect = range.getBoundingClientRect()
 
       openTimerRef.current = window.setTimeout(() => {
-        setState({ shapeId, text, rect })
+        setState({ nodeId, text, rect })
         setVisible(true)
       }, OPEN_DELAY)
     }
@@ -114,7 +110,7 @@ export function SelectionPopover({ editor }: Props) {
     }
   }, [visible])
 
-  // ── 定位 ──
+  // 定位
   useEffect(() => {
     if (!state || !visible) return
     const w = 220, h = 40, gap = 8
@@ -128,7 +124,7 @@ export function SelectionPopover({ editor }: Props) {
     setCoords({ top, left })
   }, [state, visible])
 
-  // ── ESC ──
+  // ESC 關閉
   useEffect(() => {
     if (!visible) return
     const onKey = (e: KeyboardEvent) => {
@@ -138,28 +134,16 @@ export function SelectionPopover({ editor }: Props) {
     return () => document.removeEventListener('keydown', onKey)
   }, [visible, doClose])
 
-  // ── 點擊確認 ──
+  // 點擊確認
   const handleConfirm = useCallback(() => {
-    if (!state || !editor) return
-    const shapeData = editor.getShape(state.shapeId as TLShapeId)
-    if (!shapeData) return
-
-    const userTerms: string[] = (shapeData.props as any).userTerms ?? []
-    const terms: string[] = (shapeData.props as any).terms ?? []
-    if (!userTerms.includes(state.text) && !terms.includes(state.text)) {
-      editor.updateShape({
-        id: state.shapeId as TLShapeId,
-        type: 'explainer' as any,
-        props: { userTerms: [...userTerms, state.text] },
-      })
-    }
-
+    if (!state) return
+    onMarkTerm(state.nodeId, state.text)
     setState(null)
     setVisible(false)
     window.getSelection()?.removeAllRanges()
-  }, [state, editor])
+  }, [state, onMarkTerm])
 
-  // ── click outside ──
+  // click outside
   useEffect(() => {
     if (!visible) return
     const handler = (e: MouseEvent) => {
@@ -173,7 +157,7 @@ export function SelectionPopover({ editor }: Props) {
 
   if (!state || !visible) return null
 
-  return createPortal(
+  return (
     <div
       ref={popoverRef}
       role="toolbar"
@@ -216,7 +200,6 @@ export function SelectionPopover({ editor }: Props) {
       >
         標記為名詞
       </button>
-    </div>,
-    document.body,
+    </div>
   )
 }

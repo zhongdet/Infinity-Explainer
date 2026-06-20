@@ -18,16 +18,26 @@ export interface LLMConfig {
   apiKey: string
 }
 
-/* ===== Explainer Shape Props (used by tldraw shape) ===== */
+/* ===== React Flow Data (replaces tldraw ExplainerShapeProps) ===== */
 
-export interface ExplainerShapeProps {
+export interface ExplainerNodeData {
   text: string
-  w: number
-  h: number
-  /** LLM 回傳的技術名詞，自動成為可點擊詞彙 */
   terms: string[]
-  /** 使用者手動標記的詞彙 */
   userTerms: string[]
+  /** 'idle' | 'loading' | 'error' */
+  status: string
+  errorMessage: string
+  /** default width hint for collision calc */
+  w: number
+  /** default height hint for collision calc */
+  h: number
+}
+
+export interface AnimatedEdgeData {
+  startAnchorX: number
+  startAnchorY: number
+  endAnchorX: number
+  endAnchorY: number
 }
 
 /* ===== Core Interfaces ===== */
@@ -66,11 +76,11 @@ export interface ILLMService {
 /* ===== Helper ===== */
 
 /**
- * 取得某個 shape 的完整可點擊詞彙列表（terms + userTerms）
+ * 取得某個節點 data 的完整可點擊詞彙列表（terms + userTerms）
  */
-export function getClickableTerms(props: ExplainerShapeProps): string[] {
+export function getClickableTerms(data: ExplainerNodeData): string[] {
   const set = new Set<string>()
-  for (const t of props.terms) set.add(t)
-  for (const t of props.userTerms) set.add(t)
+  for (const t of data.terms) set.add(t)
+  for (const t of data.userTerms) set.add(t)
   return [...set]
 }

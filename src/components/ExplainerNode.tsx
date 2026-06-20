@@ -546,29 +546,29 @@ function ExplainerNode({
 
   return (
     <div
-      ref={containerRef}
-      data-node-id={id}
-      className="animate-pop"
-      style={{
-        border: `2px solid ${theme.borderColor}`,
-        backgroundColor: theme.backgroundColor,
-        padding: 24,
-        boxShadow:
-          "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
-        borderRadius: 12,
-        overflow: "auto",
-        fontSize: 16,
-        lineHeight: 1.6,
-        fontFamily: "system-ui, sans-serif",
-        color: "#1f2937",
-        minWidth: 200,
-        minHeight: 100,
-        pointerEvents: "all",
-        boxSizing: "border-box",
-        position: "relative",
-      }}
-      onPointerDown={(e) => e.stopPropagation()}
-    >
+       ref={containerRef}
+       data-node-id={id}
+       className="animate-pop"
+       style={{
+         border: `2px solid ${theme.borderColor}`,
+         backgroundColor: theme.backgroundColor,
+         padding: 24,
+         boxShadow:
+           "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+         borderRadius: 12,
+         overflow: "visible",
+         fontSize: 16,
+         lineHeight: 1.6,
+         fontFamily: "system-ui, sans-serif",
+         color: "#1f2937",
+         minWidth: 200,
+         minHeight: 100,
+         pointerEvents: "all",
+         boxSizing: "border-box",
+         position: "relative",
+       }}
+       onPointerDown={(e) => e.stopPropagation()}
+     >
       <NodeResizer minWidth={200} minHeight={100} isVisible={selected} />
       {/* Invisible handles — required by React Flow for edge validation */}
       <Handle
@@ -587,7 +587,13 @@ function ExplainerNode({
       <div
         data-node-root={id}
         onDoubleClick={handleDoubleClick}
-        style={{ position: "relative", width: "100%", height: "100%" }}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          overflow: "auto",
+          margin: "5px",
+        }}
       >
         {editing ? (
           <textarea
