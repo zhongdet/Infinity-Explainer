@@ -17,12 +17,16 @@ export function createSeedNode(): {
   id: string
   type: string
   position: { x: number; y: number }
+  width: number
+  height: number
   data: ExplainerNodeData
 } {
   return {
     id: crypto.randomUUID(),
     type: 'explainer',
     position: { x: 200, y: 100 },
+    width: 700,
+    height: 420,
     data: {
       text: initialText,
       terms: demoTerms,

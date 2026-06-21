@@ -150,10 +150,14 @@ function ExplainerNode({
   id,
   data,
   selected = false,
+  width,
+  height,
 }: {
   id: string;
   data: ExplainerNodeData;
   selected?: boolean;
+  width?: number;
+  height?: number;
 }) {
   const reactFlow = useReactFlow();
   const tokenizerRef = useRef(new Tokenizer());
@@ -347,6 +351,8 @@ function ExplainerNode({
           id: newId,
           type: "explainer",
           position: { x: newX, y: newY },
+          width: W,
+          height: H,
           data: {
             text: header,
             terms: [] as string[],
@@ -566,6 +572,8 @@ function ExplainerNode({
          pointerEvents: "all",
          boxSizing: "border-box",
          position: "relative",
+         width: width,
+         height: height,
        }}
        onPointerDown={(e) => e.stopPropagation()}
      >
